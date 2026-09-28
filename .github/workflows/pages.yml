@@ -36,7 +36,6 @@ jobs:
 
       - name: Build and audit self-contained site
         run: |
-          python scripts/audit_permit_dedupe_source.py
           python scripts/build_site.py
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
@@ -49,6 +48,7 @@ jobs:
           python scripts/patch_surface_permit_ui.py
           python scripts/refine_surface_permit_ui.py
           python scripts/finalize_audit_ui.py
+          python scripts/finalize_permit_aggregation_ui.py
           python scripts/audit_build.py
 
       - name: Upload inspectable build artifact
