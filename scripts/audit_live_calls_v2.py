@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit live dispatch semantics, forest styling, and clickable provenance."""
+"""Audit live dispatch semantics, high-contrast forest styling, and clickable provenance."""
 from __future__ import annotations
 
 import collections
@@ -85,8 +85,8 @@ check(len(ids) == len(set(ids)), "duplicate public live-call IDs in fallback sna
 check(open_count <= int(meta.get("live_calls_open_source_count") or 0), "mapped open count exceeds source open count")
 check(bool(agencies), "live-call agency set is empty")
 
-# Product semantics: dark forest green, short rolling windows, Police default,
-# optional open-only filter, runtime refresh with embedded fallback.
+# Product semantics: very dark forest green, short rolling windows, Police
+# default, optional open-only filter, runtime refresh with embedded fallback.
 check('<input id="iToggle" type="checkbox">' in html, "live-call layer is not opt-in")
 for hours in (1, 3, 6, 12, 24, 48):
     check(f'data-hours="{hours}"' in html, f"missing {hours}-hour live-call preset")
@@ -94,13 +94,16 @@ check('pill active" data-hours="6"' in html, "6-hour window is not the default")
 check('<option value="Police">Police only</option>' in html, "Police-only default agency option missing")
 check('id="iOpenOnly"' in html, "open-only control missing")
 check('id="iRefresh"' in html, "manual live refresh control missing")
-check('#166534' in html and '#14532d' in html and '#f0fdf4' in html, "forest-green live-call palette missing")
+check('#064e3b' in html and '#022c22' in html and '#34d399' in html, "high-contrast forest-green live-call palette missing")
 live_css = re.search(r"\.lcg\{.*?\.incidentctl", html, re.S)
 check(bool(live_css), "live-call CSS block missing")
 if live_css:
     css = live_css.group(0).lower()
     check('#f97316' not in css and '#ea580c' not in css and '#7c3aed' not in css, "old orange/purple color remains in live-call CSS")
-check("Solid forest-green markers" in html, "methodology does not describe forest-green live markers")
+    check('fill-opacity:.46' in css, "low-zoom safety aggregates are still too faint")
+    check('stroke-width:2.2' in css, "closed-call outline was not strengthened")
+    check('drop-shadow' in css, "safety markers lack contrast halo")
+check("Dark forest-green markers" in html, "methodology does not describe dark forest-green live markers")
 check('rolling 48-hour' in html.lower() or 'rolling 48 hour' in html.lower(), "48-hour real-time source semantics missing")
 check('not confirmed crimes' in html.lower() or 'not a crime count' in html.lower(), "dispatch-vs-crime caveat missing from UI")
 check('privacy-mapped' in html.lower(), "privacy-mapped wording missing")
@@ -165,6 +168,6 @@ print("LIVE/SOURCE AUDIT PASS")
 print(f"fallback mapped calls: {len(features):,}; agencies: {dict(agencies)}")
 print(f"mapped calls currently open in fallback: {open_count:,}")
 print(f"fallback data_as_of: {meta.get('live_calls_data_as_of')}")
-print("UI: forest-green solid=open / light-green hollow=closed; 1/3/6/12/24/48h")
+print("UI: high-contrast forest-green solid=open / medium-green filled=closed; stronger low-zoom fill + halo")
 print("provenance: all seven production source datasets linked in methodology directory and inline")
 print("runtime: official DataSF refresh every 10 minutes with embedded fallback")
