@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embed recent SFPD reported incidents using deterministic SoQL pagination."""
+"""Embed recent SFPD reported incidents using bounded DataSF date chunks."""
 from __future__ import annotations
 
 import collections
@@ -19,7 +19,7 @@ QUERY_URL = f"https://data.sfgov.org/api/v3/views/{DATASET_ID}/query.json"
 SOURCE_PAGE = "https://data.sf.gov/Public-Safety/Police-Department-Incident-Reports-2018-to-Present/wg3w-h783/data"
 EMBED_DAYS = 370
 PAGE_SIZE = 5000
-MAX_ROWS = 300000
+MAX_ROWS = 600000
 FIELDS = [
     "row_id", "incident_datetime", "report_datetime", "incident_id",
     "incident_category", "incident_subcategory", "intersection",
@@ -95,35 +95,58 @@ def point_from_row(row):
     return [lon, lat]
 
 
+def fetch_interval(select: str, start: dt.datetime, end: dt.datetime):
+    """Fetch one half-open interval, recursively splitting if DataSF hits cap."""
+    a = start.strftime("%Y-%m-%dT%H:%M:%S.000")
+    b = end.strftime("%Y-%m-%dT%H:%M:%S.000")
+    query = (
+        f"SELECT {select} WHERE `incident_datetime` >= '{a}' "
+        f"AND `incident_datetime` < '{b}' "
+        "ORDER BY `incident_datetime` ASC, `row_id` ASC "
+        f"LIMIT {PAGE_SIZE}"
+    )
+    page = post_query(query)
+    if len(page) < PAGE_SIZE:
+        return page
+
+    # The v3 endpoint's page/offset semantics have proven inconsistent for this
+    # large dataset in Actions. Split the time interval instead so no source row
+    # is silently lost or repeated. Half-open intervals prevent boundary overlap.
+    span = end - start
+    if span <= dt.timedelta(hours=1):
+        raise ValueError(
+            f"SFPD interval still hits {PAGE_SIZE}-row cap at <=1 hour: {a} to {b}"
+        )
+    midpoint = start + span / 2
+    left = fetch_interval(select, start, midpoint)
+    right = fetch_interval(select, midpoint, end)
+    return left + right
+
+
 def fetch_rows(start_date, end_date):
     select = ", ".join(f"`{x}`" for x in FIELDS)
-    start_ts = start_date.isoformat() + "T00:00:00.000"
-    next_ts = (end_date + dt.timedelta(days=1)).isoformat() + "T00:00:00.000"
-    base = (
-        f"SELECT {select} WHERE `incident_datetime` >= '{start_ts}' "
-        f"AND `incident_datetime` < '{next_ts}' "
-        "ORDER BY `incident_datetime` ASC, `row_id` ASC"
-    )
+    start = dt.datetime.combine(start_date, dt.time.min)
+    stop = dt.datetime.combine(end_date + dt.timedelta(days=1), dt.time.min)
     rows = []
-    offset = 0
-    last_signature = None
-    while True:
-        page = post_query(f"{base} LIMIT {PAGE_SIZE} OFFSET {offset}")
-        if page:
-            sig = (
-                str(page[0].get("row_id") or ""),
-                str(page[-1].get("row_id") or ""),
-                len(page),
-            )
-            if sig == last_signature:
-                raise ValueError(f"DataSF pagination repeated a page at offset {offset}: {sig}")
-            last_signature = sig
-        rows.extend(page)
-        if len(page) < PAGE_SIZE:
-            break
-        offset += len(page)
+
+    # Start with 30-day windows to keep individual responses bounded. A window
+    # that reaches the API cap is recursively split until it is complete.
+    cursor = start
+    while cursor < stop:
+        chunk_end = min(cursor + dt.timedelta(days=30), stop)
+        rows.extend(fetch_interval(select, cursor, chunk_end))
         if len(rows) > MAX_ROWS:
             raise ValueError(f"Unexpectedly large recent SFPD query: >{MAX_ROWS} source rows")
+        cursor = chunk_end
+
+    # A source row should appear once because intervals are half-open, but assert
+    # this rather than trusting assumptions about upstream query behavior.
+    row_ids = [str(r.get("row_id") or "") for r in rows]
+    nonempty_ids = [x for x in row_ids if x]
+    if len(nonempty_ids) != len(set(nonempty_ids)):
+        counts = collections.Counter(nonempty_ids)
+        repeated = [k for k, v in counts.items() if v > 1][:10]
+        raise ValueError(f"Duplicate SFPD row_id values returned across date chunks: {repeated}")
     return rows
 
 
