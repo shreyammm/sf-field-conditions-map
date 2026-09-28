@@ -49,7 +49,11 @@ jobs:
           python scripts/refine_surface_permit_ui.py
           python scripts/finalize_audit_ui.py
           python scripts/finalize_permit_aggregation_ui.py
+          # General data/layer audit before the date-control UX mutation.
           python scripts/audit_build.py
+          # Final product model: no date by default; day-level closure overlap.
+          python scripts/optional_planning_date_ui.py
+          python scripts/audit_planning_date.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
