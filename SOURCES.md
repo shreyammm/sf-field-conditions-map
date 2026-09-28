@@ -10,7 +10,7 @@ Official City and County of San Francisco / DataSF sources are preferred. Each p
 - **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD`
 - **Useful fields:** `prec_2022`; neighborhood labels when exposed by the source
 - **Build validation:** feature count must remain within a broad 400–800 sanity range
-- **Fallback:** a versioned public GeoJSON snapshot from `sfbay/datadiver`, itself derived from the SF Elections source
+- **Production behavior:** official source only. If the official download fails, the build fails and the previously deployed site remains live.
 - **Interpretation:** precincts are reference geography only; other conditions should not be forced into precinct-level aggregates
 
 ## S002 — San Francisco Land Use
@@ -21,20 +21,31 @@ Official City and County of San Francisco / DataSF sources are preferred. Each p
 - **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD`
 - **Build filter:** the full official snapshot is downloaded, then the displayed layer retains only records where `resunits >= 20` and `geography_type = parcel`
 - **Fields retained when present:** `ludb_id`, `mapblklot`, `resunits`, `resunits_s`, `geography_type`, `data_as_of`, descriptive address/land-use fields, and geometry
-- **Build validation:** at least 100 retained records; every displayed record must have a valid 20+ residential-unit count and `geography_type = parcel`
+- **Build validation:** at least 100 retained records; every displayed record must have a valid 20+ residential-unit count and `geography_type = parcel`; duplicate parcel IDs cannot remain after deduplication
 - **Interpretation:** a colored feature is one property parcel with the reported residential-unit count. A parcel boundary is not necessarily the building footprint, and unit count does not establish lobby/door accessibility.
 
 ### Why non-parcel records are excluded from the displayed layer
 
 The current SF Planning source also contains `multiple_parcels` and `analytical` geographies. Filling those geometries made broad places such as parts of the Presidio look like giant apartment properties. That is misleading for canvassing-route use.
 
-Observed in the 2026-09-28 build among source records with 20+ units:
+Observed in the 2026-09-28 source snapshot among records with 20+ units:
 
-- `parcel`: 2,249 records — displayed
+- `parcel`: 2,249 source records
 - `multiple_parcels`: 33 records — excluded pending a better visual treatment
 - `analytical`: 25 records — excluded
 
-The exact counts are recalculated on every build and written to the generated data manifest.
+After resolving one exact duplicate parcel record, the displayed parcel set contains 2,248 unique 20+ unit parcels. Current threshold counts are:
+
+- 20+ units: 2,248 unique parcels
+- 50+ units: 811 unique parcels
+- 100+ units: 384 unique parcels
+- 200+ units: 120 unique parcels
+
+### Duplicate handling
+
+The current snapshot contains parcel `6311016` twice with identical geometry but reported unit counts of 170 and 174. The build retains one copy with 174 units and records the conflict in `_site/data-manifest.json`. Exact duplicates are only auto-resolved when both the parcel ID and geometry match. A duplicate parcel ID with different geometry causes the build to fail for manual review.
+
+The exact counts and anomalies are recalculated on every build and written to the generated data manifest.
 
 ## Build-time provenance
 
@@ -44,9 +55,10 @@ Every successful build writes `_site/data-manifest.json` containing:
 - source URL and dataset ID for each layer;
 - displayed feature counts;
 - the apartment-layer display filter;
+- current threshold counts;
 - source 20+ unit counts by geography type;
 - counts of excluded analytical and multi-parcel records;
-- whether the precinct source was official or the documented fallback snapshot;
+- duplicate parcel records resolved and the rule used;
 - `data_as_of` for the land-use dataset when available;
 - upstream row-update timestamps when the Socrata metadata endpoint exposes them.
 
