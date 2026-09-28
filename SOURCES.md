@@ -105,24 +105,58 @@ The official download contained 4,628 rows. Although the source documentation sa
 
 All 4,283 embedded features had line geometry, valid time windows, and unique object IDs. Of 4,283 embedded rows with a CNN, 4,281 matched a displayed Public Works street CNN; the two unmatched rows remain renderable because the official SFMTA line geometry is the displayed geometry. Embedded closure types were 3,139 Roadway Shared Spaces, 885 Special Events, and 259 Special Traffic Permits.
 
+## S006 — Active and upcoming street surface permits
+
+- **Agency:** San Francisco Public Works / DataSF
+- **Dataset ID:** `bpc9-7sus`
+- **Use:** date-filtered street-work / right-of-way authorization context
+- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/bpc9-7sus/query.geojson?accessType=DOWNLOAD`
+- **Documented scope:** active street-surface permits plus permits beginning within the near-term upcoming window; the source is refreshed daily and combines Street-Use Permit and Street Vending Permit records.
+- **Source geometry:** point locations. Production renders those points directly and does not infer a work-zone polygon or closure line.
+- **Production permit types:** `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, and `StreetSpace`.
+- **Excluded source types:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, and blank/unclassified permit types. Those may be legitimate street uses but are not a clean construction/physical-ROW-occupancy signal for this route layer.
+- **Status rule:** embedded records must be `ACTIVE` or `APPROVED` and have valid SF point geometry plus a valid permit start/end window.
+- **Date interpretation:** a point is eligible for display when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
+- **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production records the snapshot's supported date range and suppresses the layer outside it.
+- **Interpretation:** potential street/sidewalk work or occupancy context only. A permit is not proof of a closure, obstruction, exact work footprint, or pedestrian inaccessibility.
+- **Presentation:** opt-in/off by default because thousands of permit points may overlap one date and would otherwise obscure the route map.
+- **Freshness:** refreshed daily with the rest of the dynamic public-data layers.
+
+### 2026-09-28 source audit
+
+The official current/upcoming download contained 4,843 rows: 3,710 with status `APPROVED` and 1,133 `ACTIVE`. The source mixes work permits with vending/amenity uses. After applying the route-relevant type filter, validating date windows/point geometry, and collapsing exact duplicate permit-location/date/type rows, **4,231 unique permit points** were embedded.
+
+Embedded type counts were:
+
+- Excavation: 3,692
+- Temporary occupancy (`TempOccup`): 358
+- Street improvement (`StrtImprov`): 100
+- Street excavation/work (`ExcStreet`): 48
+- Additional street space (`AddlStSpac`): 20
+- Storage container (`StorCont`): 11
+- Minor encroachment (`MinorEnc`): 1
+- Street space (`StreetSpace`): 1
+
+The build omitted 469 source rows whose permit type was outside the construction/ROW filter, 141 exact duplicate rows, and 2 rows with invalid/missing permit date windows. The audited work records had a latest retained `data_as_of` value of `2026-09-25T03:27:20.780`; the product therefore treats `2026-09-25` through `2026-10-09` as the supported current/upcoming display window for that snapshot. On 2026-09-27, 3,921 embedded permit windows overlapped the date, which is why this dense layer is off by default.
+
 ## Build-time provenance
 
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; `data_as_of` when available; and upstream row-update timestamps when exposed by Socrata metadata.
+Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, duplicate/exclusion counts, `data_as_of` and supported date range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
 
 The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
 
-## Candidate future sources
+## Related / candidate sources
 
 ### Slopes of 20% or Greater
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `3vv2-nvev`
 - **Candidate use:** independent historical cross-check of steep areas; not a substitute for street-segment grade.
 
-### Street-Use Permits
+### Street-Use Permits (full historical table)
 - **Agency:** San Francisco Public Works / DataSF
 - **Dataset ID:** `b6tj-gt35`
-- **Candidate use:** construction/right-of-way disruptions.
-- **Caveat:** a permit is not proof of a full street closure.
+- **Relationship:** broader historical Street-Use Permit source. Production uses the smaller current/upcoming street-surface view `bpc9-7sus` for route relevance.
+- **Caveat:** a permit is not proof of a full street closure or of work occurring at a particular moment.
 
 ### Police Department Incident Reports: 2018 to Present
 - **Agency:** San Francisco Police Department / DataSF
