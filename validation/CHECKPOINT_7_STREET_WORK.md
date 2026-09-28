@@ -61,7 +61,7 @@ Rows must also:
 
 ## Audited embedded result
 
-The first successful production build embedded **4,231 unique route-relevant permit points** from 4,843 source rows.
+The successful production build embedded **4,231 unique route-relevant permit points** from 4,843 source rows.
 
 Embedded type counts:
 
@@ -82,7 +82,7 @@ Omitted during production filtering:
 
 All 4,231 embedded geometries are Points. No exact duplicates remain under the production dedupe key.
 
-The embedded properties intentionally exclude DBA/applicant/contact information and raw latitude/longitude duplicates. Retained properties are limited to operational permit metadata such as permit number/type/description/status, permit dates, street/cross street, neighborhood/district, `data_as_of`, and the official point geometry.
+The embedded properties intentionally exclude DBA/applicant/contact information and raw latitude/longitude duplicates. Retained properties are limited to operational permit metadata such as permit number/type/description/status, permit dates, street/cross street, neighborhood/district, row-level `data_as_of`, and the official point geometry.
 
 ## Date filtering and completeness
 
@@ -94,7 +94,9 @@ A permit marker is eligible when:
 
 This means the **authorization window overlaps the selected date**. It does not mean crews are necessarily physically working at that moment.
 
-The current/upcoming source is not a historical archive. The audited retained records had latest `data_as_of = 2026-09-25T03:27:20.780`, so this build treats **2026-09-25 through 2026-10-09** as the supported snapshot window. The map suppresses this layer outside that range instead of silently showing incomplete historical or far-future results.
+The current/upcoming source is not a historical archive. The source documentation defines it as current permits plus permits starting in the near-term upcoming window, so completeness is anchored to the **actual San Francisco retrieval date**, not to a row-level `data_as_of` value. Row-level `data_as_of` varies by permit and therefore is retained only as record metadata/diagnostic information.
+
+The audited build retrieved the source at **2026-09-27 23:12 SF time** and therefore treats **2026-09-27 through 2026-10-11** as the supported current/upcoming snapshot window. The map suppresses this layer outside that range instead of silently showing incomplete historical or far-future results.
 
 On 2026-09-27, **3,921** embedded permit windows overlap the date. Because this is visually dense, the layer is **off by default** and must be explicitly toggled on.
 
