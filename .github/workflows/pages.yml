@@ -59,6 +59,7 @@ jobs:
           python scripts/optional_planning_date_ui.py
           # Recent SFPD incidents are an independent, opt-in lookback layer.
           python scripts/patch_incident_ui.py
+          python scripts/finalize_incident_ui.py
           python scripts/audit_planning_date.py
           python scripts/audit_incidents.py
 
