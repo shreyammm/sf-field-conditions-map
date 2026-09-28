@@ -1,171 +1,130 @@
-# Source manifest
+# Production source manifest
 
-Production layers use official City and County of San Francisco / DataSF sources. A source becomes a production layer only after its schema/geography is inspected, identifiers and duplicate behavior are understood, real-world examples are spot-checked, and material limitations are represented in the product.
+Production layers use official City and County of San Francisco / DataSF sources. The map does not substitute third-party summaries for production data. The exact source identifiers are also linked inside the map's methodology panel.
+
+Current record counts and timestamps are intentionally **not hard-coded in this document** because several sources refresh daily or more often. The authoritative per-build counts, exclusions, source timestamps, and anomalies are written to `_site/data-manifest.json` and checked by `scripts/deep_accuracy_audit.py` before deployment.
 
 ## S001 — Election Precincts — Current, Defined 2022
 
 - **Agency:** San Francisco Department of Elections / DataSF
 - **Dataset ID:** `d6x4-hefw`
-- **Use:** neutral precinct reference boundaries
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD`
-- **Source meaning:** Department of Elections voting precincts, redefined in 2022 from Census 2020 geography with exceptions.
-- **Retained fields:** precinct ID and neighborhood labels when present, plus geometry.
-- **Build validation:** 400–800 features, non-empty unique precinct IDs, plausible SF coordinates.
-- **Production behavior:** official source only. An upstream failure stops the refresh rather than changing provenance.
-- **Interpretation:** reference geography only; operational conditions are not forced into precinct scores.
+- **Official source:** https://data.sf.gov/d/d6x4-hefw
+- **Production use:** neutral reference boundaries only.
+- **Source meaning:** current voting precinct geography defined in 2022, based on Census 2020 geography with exceptions.
+- **Validation:** expected polygon/MultiPolygon geometry, non-empty unique precinct IDs, plausible SF geometry, broad count guardrail.
+- **Interpretation:** the map does not calculate a precinct score, political ranking, safety score, or aggregation of the operational layers into precincts.
 
-## S002 — San Francisco Land Use
+## S002 — Current San Francisco Land Use
 
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `c5ge-t6pj`
-- **Use:** high-unit residential parcel / possible shared-entry-friction proxy
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD`
-- **Source cadence:** Planning describes this as a current land-use snapshot updated at the end of each quarter.
-- **Display filter:** `resunits >= 20 AND geography_type = parcel`
-- **Retained fields:** `ludb_id`, `mapblklot`, `resunits`, `resunits_s`, `geography_type`, `data_as_of`, available descriptive address/land-use fields, and geometry.
-- **Build validation:** every displayed record is parcel geography with a valid 20+ unit count; parcel IDs are unique after controlled deduplication; coordinates must be plausible for SF.
-- **Interpretation:** a colored feature is a parcel-level property lot with the reported residential-unit count. It is not necessarily a building footprint, and unit count does not establish entrance accessibility.
+- **Official source:** https://data.sf.gov/d/c5ge-t6pj
+- **Production use:** high-unit residential **parcel** concentration.
+- **Display filter:** `resunits >= 20 AND geography_type = parcel`.
+- **Validation:** every displayed feature must be parcel geography, have a valid 20+ residential-unit count and stable parcel ID, and use plausible SF polygon geometry.
+- **Duplicate policy:** repeated identical parcel geometry is resolved only when the observed unit counts remain in the same displayed threshold bucket. The observed range is retained. A repeated parcel with conflicting geometry or a unit-count conflict that crosses a 20/50/100/200 threshold fails the build for manual review.
+- **Interpretation:** a parcel is a property-lot geometry, **not necessarily a building footprint**. Unit count is a residential-concentration proxy, not evidence of lobby/entrance accessibility.
+- **Source limitation:** SF Planning itself cautions that, given the volume of parcel data, accuracy is not guaranteed for every record. The map therefore links the source and retains the source timestamp rather than treating the unit counts as infallible ground truth.
 
-### Why non-parcel records are excluded
-
-Planning explicitly notes that some land-use rows represent groups of parcels. Filling broad `multiple_parcels` or `analytical` geometry can make a large planning/project area look like one giant apartment property. For route use, those records remain excluded until a separate representation is validated.
-
-In the 2026-09-28 source snapshot among records with 20+ units:
-
-- `parcel`: 2,249 source rows
-- `multiple_parcels`: 33 — excluded from the parcel fill layer
-- `analytical`: 25 — excluded from the parcel fill layer
-
-One repeated parcel record is present in that snapshot. After controlled resolution there are 2,248 unique 20+ unit parcels, with threshold counts of 2,248 at 20+, 811 at 50+, 384 at 100+, and 120 at 200+.
-
-### Duplicate handling
-
-Parcel `6311016` appears twice in the current source with identical parcel ID/geometry and unit counts 170 and 174. Both counts fall in the same 100–199 display bucket. The build keeps one geometry but annotates the feature/source manifest with the observed 170–174 range so the UI does not imply false exactness. If a future identical-parcel conflict crosses one of the displayed thresholds (20/50/100/200), the build fails for manual review. A repeated parcel ID with different geometry also fails.
+`multiple_parcels` and `analytical` rows are excluded from the colored parcel layer because broad planning/project geometry can otherwise look like one large apartment property.
 
 ## S003 — Streets – Active and Retired
 
 - **Agency:** San Francisco Public Works / DataSF
 - **Dataset ID:** `3psu-pn9h`
-- **Use:** visual street network and canonical street-segment geography for hill, closure, and construction layers
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/3psu-pn9h/query.geojson?accessType=DOWNLOAD`
-- **Source meaning:** Public Works street centerlines. `cnn` is the Centerline Network Number for a segment in the dataset. `active = true` means the segment is not retired; it does not guarantee public access or even that every source-layer line is a physical street.
-- **Class codes:** 1 freeway; 2 major street/highway; 3 arterial; 4 collector; 5 residential; 6 freeway ramp; 0 other.
-- **Retained fields:** `cnn`, official street name/type/full name, endpoint streets/nodes, class code, source layer, jurisdiction, active/accepted/one-way fields when present, analysis neighborhood, `data_as_of`, and geometry.
-
-### Street display filter
-
-The audited source has 16,372 active records. The route-context layer starts with `active = true` and excludes `PAPER`, `PAPER_FWYS`, `PAPER_WATER`, `PSEUDO`, and `PRIVATE_PARKING`, leaving **15,901 displayed street segments** in the 2026-09-28 build.
-
-Real but nonstandard context can remain: private streets, unpaved rights-of-way, pedestrian-only streets, park/NPS roads, freeways and ramps. The UI identifies these categories rather than assuming they are publicly walkable or appropriate canvassing routes.
-
-- **Build validation:** 9,000–25,000 displayed line features, unique/non-empty CNN, no excluded source layer leakage, plausible SF coordinates.
-- **Join rule:** CNN is used when another public dataset exposes the same segment identifier. Do not assume a CNN is permanently immutable across all future street-network revisions; source changes are revalidated at build time.
+- **Official source:** https://data.sf.gov/d/3psu-pn9h
+- **Production use:** street-centerline route/context backbone and canonical segment geometry for derived hills.
+- **Base filter:** `active = true`.
+- **Product exclusion rule:** source-layer categories `PAPER`, `PAPER_FWYS`, `PAPER_WATER`, `PSEUDO`, and `PRIVATE_PARKING` are excluded from the physical route-context backbone. This is a product policy based on those source-layer categories; it is **not** an official Public Works determination that every retained line is publicly walkable.
+- **Class codes used for styling only:** 1 freeway; 2 major street/highway; 3 arterial; 4 collector; 5 residential; 6 freeway ramp; 0 other.
+- **Validation:** unique/non-empty CNN, line geometry, no excluded-layer leakage, active records only, plausible SF geometry and broad count guardrails.
+- **Interpretation:** `active` means not retired. Private streets, pedestrian-only streets, park/NPS roads, unpaved rights-of-way, freeways and ramps can remain as labeled context. The map does not claim they are accessible canvassing routes.
 
 ## S004 — Elevation Contours
 
 - **Agency:** City and County of San Francisco / DataSF
 - **Dataset ID:** `rnbg-2qxw`
-- **Use:** derive the hill-steepness overlay on the displayed Public Works street centerlines
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/rnbg-2qxw/query.geojson?accessType=DOWNLOAD`
-- **Source meaning:** 5-foot elevation contours for San Francisco mainland and Treasure Island/Yerba Island, based on the San Francisco Elevation Datum.
-- **Production method:** directly intersect each applicable street centerline with contour lines. Consecutive same-elevation crossings contribute zero net rise across their directly supported span. A nonzero consecutive crossing must differ by approximately 5 feet, matching the source contour interval. Accepted intervals are combined by directly supported along-street distance.
-- **No interpolation fallback:** streets without enough direct contour evidence remain `unavailable`; freeway mainlines and ramps are `not_applicable` for the canvassing hill layer.
-- **Confidence:** high/medium/low based on usable crossing intervals, distinct contour levels, supported street distance, and supported fraction of the full street segment. Low-confidence estimates are visually faded/dashed.
-- **Guardrails:** reject ambiguous same-location/different-elevation crossings, non-5-foot elevation jumps, degenerate spans, and >45% short-span crossing artifacts. Fail for unexpectedly low coverage or an implausibly large share of 20%+ classifications.
-- **Interpretation:** contour-supported route-planning estimate over directly supported portions of the street segment; not an official Public Works engineering street-grade survey.
+- **Official source:** https://data.sf.gov/d/rnbg-2qxw
+- **Production use:** derived street steepness overlay.
+- **Source meaning:** elevation contours at five-foot intervals for San Francisco mainland and Treasure Island/Yerba Island, based on the San Francisco Elevation Datum. DataSF marks this as historical/not regularly updated.
+- **Method:** directly intersect each applicable non-freeway street centerline with the contour lines. Consecutive same-elevation crossings contribute zero net rise across that supported span. Non-zero consecutive crossings must differ by approximately five feet. Non-five-foot jumps, ambiguous coincident crossings, degenerate intervals, and >45% short-span artifacts are rejected instead of forced into a grade.
+- **Confidence:** high/medium/low based on accepted crossing intervals, distinct contour levels, supported along-street distance, and supported fraction of the segment. Low-confidence estimates are visually dashed/faded.
+- **No interpolation fallback:** streets without enough direct evidence remain `unavailable`; freeway/ramp context is `not_applicable`.
+- **Interpretation:** a **contour-supported route-planning estimate over directly supported portions**, not an official engineering street-grade survey or full routing score.
 
-Two interpolation prototypes were rejected before deployment after producing implausible 60%+ values. A later audit also found that an earlier direct-crossing version could bias values upward by silently omitting same-elevation supported spans. The current v2 method explicitly includes those spans as zero net rise and records segment coverage.
-
-In the 2026-09-28 audited build, 15,682 non-freeway/ramp street segments were applicable; 9,375 received a grade estimate, 6,307 remained unavailable, and 219 freeway/ramp segments were marked not applicable. Confidence among classified segments was 4,688 high, 2,006 medium, and 2,681 low. See `validation/CHECKPOINT_5_HILLS.md`.
+Earlier interpolation prototypes and an earlier direct-crossing variant were rejected during validation after producing implausible values or upward bias. The production method is `direct_5ft_contour_crossings_v2` and the build records its coverage/confidence distribution.
 
 ## S005 — Temporary Street Closures
 
 - **Agency:** San Francisco Municipal Transportation Agency / DataSF
 - **Dataset ID:** `8x25-yybr`
-- **Use:** optional-date temporary street/vehicle-disruption overlay
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/8x25-yybr/query.geojson?accessType=DOWNLOAD`
-- **Documented scope:** upcoming/current temporary closures associated with Shared Spaces, certain special events, and some construction work. SFMTA documentation says the feed covers SFMTA-permitted closures and does not include every closure managed by Public Works, SFPD, or other departments.
-- **Production filter:** status must explicitly equal `Permitted`; rows also need a non-empty object ID, valid LineString/MultiLineString geometry, and valid `start_dt <= end_dt`.
-- **Retained fields:** case number/name, closure type/status, `start_dt`, `end_dt`, location description, CNN, street/from/to, direction, vehicle impact, info, and official line geometry.
-- **Date interpretation:** the map opens with no selected date and therefore no closure lines. After the user selects a San Francisco calendar date, a closure is shown when its official local interval overlaps any portion of that day: `start_dt < next_day_00:00 AND end_dt >= selected_day_00:00`. The exact source start/end hours remain visible in hover/click details. **Today** is computed in `America/Los_Angeles`.
-- **Geometry rule:** render SFMTA's official closure line geometry directly. CNN is retained and compared with the Public Works street backbone for validation but is not required to render a valid official closure line.
-- **Interpretation:** street/vehicle disruption indicator only. A closure line does not prove that pedestrian passage is prohibited.
-- **Freshness:** the source documentation describes the report as daily. Current rows did not expose a usable `data_as_of` field, so the product reports the build/retrieval date rather than inventing one. The production workflow refreshes daily.
+- **Official source:** https://data.sf.gov/d/8x25-yybr
+- **Production use:** date-optional street/vehicle-disruption overlay.
+- **Documented scope:** SFMTA-permitted temporary closures associated with Shared Spaces, certain special events, and some construction work. SFMTA documents that other departments' closures are not comprehensively represented.
+- **Production filter:** `status = Permitted` plus non-empty object ID, valid line geometry, and valid start/end window. The filter is applied even if source documentation says the table is permitted-only; source contents are independently checked at build time.
+- **Date rule:** a closure is visible when its official local interval overlaps any portion of the selected San Francisco calendar date: `start < next_day_00:00 AND end >= selected_day_00:00`.
+- **Geometry:** render the official SFMTA line directly; do not expand it into a guessed closure area.
+- **Freshness:** `data_as_of` is retained when provided. Because this is a time-sensitive source that SFMTA describes as daily, the UI displays its source date and warns when it is more than two days behind the build date. The deep audit fails if that gap exceeds 14 days.
+- **Interpretation:** a closure line indicates a permitted street/vehicle disruption. It does **not** establish that pedestrian access is blocked.
 
-### 2026-09-28 source audit
+### Related Public Works permit context
 
-The official download contained 4,628 rows. Although the source documentation says the dataset contains permitted temporary closures, the download also contained workflow/application statuses. Production explicitly filtered them rather than relying on the documentation alone:
+Only `Special Traffic Permit` closure rows are eligible for contextual matching. A Public Works permit is shown as related context only when:
 
-- `Permitted`: 4,283 — embedded
-- `Application In Review`: 216 — excluded
-- `Submitted`: 92 — excluded
-- `Pending Payment`: 29 — excluded
-- `Pending Additional Information`: 7 — excluded
-- `On Hold`: 1 — excluded
+1. normalized street name matches;
+2. permit and closure date windows overlap; and
+3. the official Public Works point lies within 120 m of the official SFMTA closure line.
 
-All 4,283 embedded features had line geometry, valid time windows, and unique object IDs. Of 4,283 embedded rows with a CNN, 4,281 matched a displayed Public Works street CNN; the two unmatched rows remain renderable because the official SFMTA line geometry is the displayed geometry. Embedded closure types were 3,139 Roadway Shared Spaces, 885 Special Events, and 259 Special Traffic Permits.
+This is explicitly a **context match, not a causal join**. The UI never states that the Public Works permit caused the SFMTA closure.
 
 ## S006 — Active and upcoming street surface permits
 
 - **Agency:** San Francisco Public Works / DataSF
 - **Dataset ID:** `bpc9-7sus`
-- **Use:** date-filtered street-work / right-of-way authorization context
-- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/bpc9-7sus/query.geojson?accessType=DOWNLOAD`
-- **Documented scope:** active street-surface permits plus permits beginning within the near-term upcoming window; the source is refreshed daily and combines Street-Use Permit and Street Vending Permit records.
-- **Source geometry:** point locations. Production renders those points directly and does not infer a work-zone polygon or closure line.
-- **Production permit types:** `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, and `StreetSpace`.
-- **Excluded source types:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, and blank/unclassified permit types. Those may be legitimate street uses but are not a clean construction/physical-ROW-occupancy signal for this route layer.
-- **Status rule:** source rows must be `ACTIVE` or `APPROVED` and have valid SF point geometry, a permit number, and a valid permit start/end window.
-- **Date interpretation:** the permit overlay is absent until the user selects a planning date and enables the permit layer. A point is eligible when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
-- **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production anchors the supported range to the actual San Francisco retrieval date and suppresses the layer outside the current/upcoming window. Row-level `data_as_of` varies by record and is not used as the snapshot date.
-- **Interpretation:** potential street/sidewalk work or occupancy context only. A permit is not proof of a closure, obstruction, exact work footprint, or pedestrian inaccessibility.
-- **Presentation:** opt-in/off by default because thousands of permit authorization windows may overlap one date. When disabled, the browser does not create hidden permit SVG markers.
-- **Freshness:** refreshed daily with the rest of the dynamic public-data layers.
+- **Official source:** https://data.sf.gov/d/bpc9-7sus
+- **Production use:** date-filtered street-work / right-of-way authorization context.
+- **Documented source scope:** active permits plus permits whose start date is within the next 14 days; refreshed daily; union of Street Use and Street Vending permit data.
+- **Production types:** `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, `StreetSpace`.
+- **Excluded from this product layer:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, blank/unclassified and other source types that are not a clean construction/physical-occupancy signal for the intended route context.
+- **Status rule:** `ACTIVE` or `APPROVED` only.
+- **Geometry:** official point only. The map never turns a point into a guessed work-zone polygon or closure line.
+- **Date rule:** selected SF calendar date falls inclusively inside the permit authorization window, and the date must be inside the current build's supported current/+14-day snapshot window.
+- **Co-located source rows:** rows are merged to one marker only when permit number, type, exact source point, and start/end window all match. Distinct source street/cross-street descriptions, permit descriptions, statuses, neighborhoods and relevant timestamps are preserved on the marker.
+- **Interpretation:** authorization context only. A permit does not establish that crews are present, a street is closed, an exact footprint is occupied, or pedestrians cannot pass.
 
-### Co-located source rows
+## S007 — Law Enforcement Dispatched Calls for Service: Real-Time
 
-The full audit found an important source behavior that the first implementation mislabeled as simple deduplication. The audited source had **141 additional rows sharing 50 permit/type/point/date-window keys**. In **46 of those marker groups**, source rows had different street/cross-street descriptors. This is consistent with a permit having multiple textual locations while DataSF supplies the same representative point geometry for those rows.
+- **Agency:** San Francisco Department of Emergency Management / DataSF
+- **Dataset ID:** `gnap-fj3t`
+- **Official source:** https://data.sf.gov/d/gnap-fj3t
+- **Official explainer:** https://sfdigitalservices.gitbook.io/dataset-explainers/law-enforcement-dispatched-calls-for-service
+- **Production use:** optional recent law-enforcement dispatch activity overlay.
+- **Upstream scope:** DataSF describes the real-time table as calls closed in the last 48 hours plus any calls that remain open; older open/reopened exceptions can therefore appear upstream. The feed normally updates every 10 minutes with about a 10-minute additional delay.
+- **Product time rule:** users select calls **received within** the last 1, 3, 6, 12, 24 or 48 SF-local hours. Older upstream open/reopened rows are not displayed by these controls.
+- **Fallback build query:** only rows received in the preceding 49 SF-local hours are requested, providing a one-hour buffer beyond the maximum user view.
+- **Counting/uniqueness:** DataSF documents `cad_number` as the unique dispatched-incident identifier. The build requires a non-empty, unique `cad_number` for each queried source row. `cad_number` is used for validation but is not embedded in the user-facing feature properties because the UI does not need it.
+- **Truncation protection:** build and runtime queries have a 10,000-row cap and are rejected rather than used if the response reaches the cap.
+- **Freshness protection:** fallback and runtime data must pass a <=180-minute `data_as_of` freshness check; otherwise the runtime response is rejected and the audited fallback remains.
+- **Runtime behavior:** the browser does **not** query DataSF merely because the map opens. The official feed is requested when this optional layer is enabled and can refresh at most every 10 minutes while enabled.
+- **Open/closed meaning:** `close_datetime` absent => still open; a populated close time => closed, following the source's operational lifecycle.
+- **Privacy:** public locations are anonymized/mapped to intersection-level locations. Sensitive call types can have public location fields suppressed, and those rows are therefore not mappable here.
+- **Interpretation:** these are operational dispatch records, **not confirmed crimes** and not a crime count. The map does not create a neighborhood or precinct safety/risk score.
 
-Production therefore does **not** call those rows exact duplicates. Rows are aggregated to one map marker only when they have the same permit number, permit type, exact source point, and permit start/end window. The marker retains all distinct source street/cross-street pairs, descriptions, statuses, neighborhoods, districts, and relevant row timestamps. Hover/click explains when multiple source rows or source street locations share one point. This preserves the source information without drawing dozens of identical overlapping circles or pretending that the point identifies every work location precisely.
+At low zoom, nearby privacy-mapped source points are combined into display-only circles. Zooming in separates them into clusters at the public source coordinates. Aggregate marker status distinguishes all-open, all-closed, and mixed represented calls; the aggregate center itself is not an incident location.
 
-### 2026-09-28 source audit
+## Build/deployment audit contract
 
-The official current/upcoming download contained 4,843 rows: 3,710 with status `APPROVED` and 1,133 `ACTIVE`. The source mixes work permits with vending/amenity uses. After applying the route-relevant type filter and validating point/date/permit-number fields, the eligible rows are grouped using the co-location rule above, yielding **4,231 permit markers** from **4,372 eligible source rows** in the audited snapshot. The difference is the 141 additional co-located source rows described above; they are represented in marker metadata rather than discarded.
+Every successful build writes `_site/data-manifest.json` containing the exact production source IDs/URLs, retrieval/source timestamps, record counts, exclusions, duplicate handling, hill method/support/confidence, closure/permit date semantics, closure-context match counts, and live-feed query/freshness guardrails.
 
-Marker type counts were:
+The workflow runs layer-specific validation, a general artifact audit, the final UI mutations, a final semantic-accuracy pass, and `scripts/deep_accuracy_audit.py` against the exact HTML that will be deployed. Any failed source fetch, schema guardrail, semantic check, JavaScript syntax check, freshness guardrail, or final audit prevents a new Pages deployment and leaves the previously successful site live.
 
-- Excavation: 3,692
-- Temporary occupancy (`TempOccup`): 358
-- Street improvement (`StrtImprov`): 100
-- Street excavation/work (`ExcStreet`): 48
-- Additional street space (`AddlStSpac`): 20
-- Storage container (`StorCont`): 11
-- Minor encroachment (`MinorEnc`): 1
-- Street space (`StreetSpace`): 1
+All stable layers are embedded. The sole whitelisted runtime network request is the optional official DataSF real-time dispatch feed while that layer is enabled.
 
-The route-type filter excludes 469 non-work/unclassified source rows; two source rows in the audited snapshot had invalid/missing permit date windows. The latest retained row-level `data_as_of` value is tracked for diagnostics but is **not** used as the snapshot date. The supported range is recalculated each build from the actual San Francisco retrieval date through 14 days later. On the initial audited 2026-09-27 snapshot, 3,921 marker authorization windows overlapped that date, which is why this dense layer is off by default.
-
-## Build-time provenance and deployment audit
-
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, co-located-row aggregation counts, SF retrieval time and supported date range; housing threshold counts and excluded geography counts; parcel-source anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
-
-The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map. The build first runs the general data/layer artifact audit, then applies the optional planning-date UI mutation, then runs a dedicated final planning-date audit against the HTML that will actually be deployed. A failed audit prevents a new Pages deployment and leaves the prior successful version live.
-
-## Related / candidate sources
+## Related validation-only source
 
 ### Slopes of 20% or Greater
+
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `3vv2-nvev`
-- **Candidate use:** independent historical cross-check of steep areas; not a substitute for street-segment grade.
-
-### Street-Use Permits (full historical table)
-- **Agency:** San Francisco Public Works / DataSF
-- **Dataset ID:** `b6tj-gt35`
-- **Relationship:** broader historical Street-Use Permit source. Production uses the smaller current/upcoming street-surface view `bpc9-7sus` for route relevance.
-- **Caveat:** a permit is not proof of a full street closure or of work occurring at a particular moment.
-
-### Police Department Incident Reports: 2018 to Present
-- **Agency:** San Francisco Police Department / DataSF
-- **Dataset ID:** `wg3w-h783`
-- **Candidate use:** recent reported-incident geography with an explicit time window.
-- **Caveat:** SFPD location privacy/geocoding limitations must remain visible; reported incidents are not a definitive neighborhood-risk score.
+- **Use:** possible independent historical cross-check of known steep areas.
+- **Not used as a production grade source:** it should not be treated as an official segment-by-segment grade replacement for the contour computation.
