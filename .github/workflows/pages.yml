@@ -5,8 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Daily rebuild refreshes fallback snapshots. The public-safety layer also
-    # refreshes its official real-time DataSF feed in-browser every 10 minutes.
+    # Daily rebuild refreshes bundled source snapshots. The optional live
+    # dispatch layer queries the official DataSF feed only while enabled.
     - cron: "17 14 * * *"
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
-          # Small fallback snapshot for the official real-time dispatch feed.
+          # Audited recent fallback snapshot for the official real-time dispatch feed.
           python scripts/add_live_calls.py
           python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
@@ -59,13 +59,14 @@ jobs:
           python scripts/audit_build.py
           # No date by default; day-level closure overlap.
           python scripts/optional_planning_date_ui.py
-          # Short-window public-safety activity: 1–48h, live API + fallback.
+          # Short-window law-enforcement dispatch activity: 1–48h, official live API + fallback.
           python scripts/patch_live_calls_ui.py
-          # Final visual/provenance pass: forest-green safety markers and
-          # direct official DataSF links throughout the methodology key.
+          # Provenance/visual pass, then one final semantic correction pass over
+          # the exact artifact users will receive.
           python scripts/finalize_source_links_and_safety_color.py
+          python scripts/final_accuracy_pass.py
           python scripts/audit_planning_date.py
-          python scripts/audit_live_calls_v2.py
+          python scripts/deep_accuracy_audit.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
