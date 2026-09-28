@@ -4,7 +4,7 @@ on:
   push:
     branches: [hill-layer-dev]
     paths:
-      - tools/hills.patch.gz.b64
+      - tools/hillchunk*.txt
       - .github/workflows/apply-hills.yml
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
       - name: Apply audited hill-layer patch
         run: |
-          base64 -d tools/hills.patch.gz.b64 | gzip -dc > /tmp/hills.patch
+          cat tools/hillchunk00.txt tools/hillchunk01.txt tools/hillchunk02.txt tools/hillchunk03.txt | base64 -d | gzip -dc > /tmp/hills.patch
           git apply --check /tmp/hills.patch
           git apply /tmp/hills.patch
           python -m py_compile scripts/build_site.py
@@ -36,6 +36,7 @@ jobs:
       - name: Remove development scaffolding
         run: |
           rm -f tools/hills.patch.gz.b64
+          rm -f tools/hillchunk00.txt tools/hillchunk01.txt tools/hillchunk02.txt tools/hillchunk03.txt
           rm -f scripts/inspect_hill_source.py
           rm -f .github/workflows/inspect-hills.yml
           rm -f .github/workflows/apply-hills.yml
