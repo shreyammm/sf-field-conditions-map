@@ -84,7 +84,7 @@ For exact duplicate parcel rows with identical geometry, conflicting unit values
 
 ## D012 — Hill steepness uses direct official contour crossings
 **Date:** 2026-09-28
-**Status:** revised after second sanity audit
+**Status:** audited production methodology
 
 The hill layer derives a street-level steepness estimate from DataSF Elevation Contours (`rnbg-2qxw`), which publishes 5-foot contour lines. The production method directly intersects each non-freeway displayed Public Works street centerline with those contours.
 
@@ -98,7 +98,7 @@ The displayed value is labeled a **contour-supported grade estimate** because it
 
 ## D013 — Temporary closures use official SFMTA line geometry and SF-local time
 **Date:** 2026-09-28
-**Status:** production methodology, pending user visual review
+**Status:** audited production methodology; tightened by D015
 
 Use SFMTA / DataSF Temporary Street Closures (`8x25-yybr`) as the temporary-closure layer. Render the official closure line geometry directly rather than replacing it with an inferred precinct or full-street highlight.
 
@@ -114,7 +114,7 @@ Because the current closure rows do not expose a usable `data_as_of` value, the 
 
 ## D014 — Street-work / ROW permits are point-level authorization context, not closures
 **Date:** 2026-09-28
-**Status:** production methodology, pending user visual review
+**Status:** revised by D015
 
 Use SF Public Works / DataSF `Active and upcoming street surface permits` (`bpc9-7sus`) for the construction/right-of-way context layer rather than treating the much larger historical Street-Use Permits table as if every historical record were currently relevant.
 
@@ -124,4 +124,18 @@ Render the official source **point** geometry. Do not stretch a point into a str
 
 Permit rows are filtered by the selected San Francisco **calendar date**, inclusive of the permit start/end dates, because many source windows are day-level rather than precise operational hours. The source is a current/upcoming snapshot (current permits plus starts in the near-term window), so the map suppresses the permit layer outside the documented snapshot support range rather than implying historical or far-future completeness.
 
-The layer is opt-in/off by default because several thousand valid permit points can overlap one date and would otherwise obscure the core street/parcel/closure map. Exact duplicate permit-location/date/type rows are collapsed at build time and logged in the manifest. Production refreshes daily.
+The layer is opt-in/off by default because several thousand permit authorization windows can overlap one date and would otherwise obscure the core street/parcel/closure map. The original implementation described same-point rows as “exact duplicates”; D015 corrects that interpretation.
+
+## D015 — Full-layer audit: preserve co-located permit rows and audit the final artifact
+**Date:** 2026-09-28
+**Status:** production audit correction
+
+A source-level audit found that the original ROW-permit collapse key grouped **141 additional source rows into 50 marker keys**, but **46 of those marker groups contained different street/cross-street descriptors**. They were therefore not safely describable as exact duplicates. Several Public Works permits publish multiple textual street locations at the same official point.
+
+Production now aggregates rows only when they share the same permit number, permit type, **exact source point**, and permit start/end window. One point marker is still appropriate because the source geometry is identical, but the marker preserves every distinct source street/cross-street pair, description, status, neighborhood, district, and relevant row timestamp rather than arbitrarily keeping one row's text. Hover/click explicitly explains when multiple source rows or locations share one official point. This does not make the point an exact work footprint.
+
+The audit also found two UI/engineering issues. The shared date/time control had a closure-only accessibility label even though both closures and permits use it; it is now labeled as the field date/time. And the opt-in permit layer previously created thousands of SVG circles on page load and merely hid them; it now creates permit markers only when the layer is enabled and clears them when disabled.
+
+Closure filtering was tightened to require an explicit `Permitted` status; a blank status can no longer slip through as implicitly acceptable.
+
+A separate final-artifact audit now runs on every build **before GitHub Pages deployment**. It re-checks layer counts, geometry types, IDs, street exclusions, parcel geography/thresholds, hill fields and distributions, closure status/time/CNN behavior, permit aggregation and privacy fields, provenance IDs, UI defaults, external dependencies/runtime fetches, duplicate HTML IDs, and inline JavaScript syntax. If any invariant fails, deployment is skipped and the previous successful Pages version remains live.
