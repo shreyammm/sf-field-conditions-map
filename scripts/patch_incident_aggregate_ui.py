@@ -84,10 +84,10 @@ rep(
     "incident state",
 )
 
-proj_anchor = "function proj(c){const [minx,miny,maxx,maxy]=S.b;const sx=(W-2*PAD)/(maxx-minx),sy=(H-2*PAD)/(maxy-miny),k=Math.min(sx,sy),ox=(W-(maxx-minx)*k)/2,oy=(H-(maxy-miny)*k)/2;return[ox+(c[0]-minx)*k,H-(oy+(c[1]-miny)*k)]}"
+proj_anchor = "function proj([lon,lat]){const b=S.b,s=Math.min((W-2*PAD)/(b.c-b.a),(H-2*PAD)/(b.d-b.b)),dw=(b.c-b.a)*s,dh=(b.d-b.b)*s;return[(W-dw)/2+(lon-b.a)*s,(H-dh)/2+(b.d-lat)*s]}"
 rep(
     proj_anchor,
-    proj_anchor + "\nfunction invProj(xy){const [minx,miny,maxx,maxy]=S.b,sx=(W-2*PAD)/(maxx-minx),sy=(H-2*PAD)/(maxy-miny),k=Math.min(sx,sy),ox=(W-(maxx-minx)*k)/2,oy=(H-(maxy-miny)*k)/2;return[minx+(xy[0]-ox)/k,miny+((H-xy[1])-oy)/k]}",
+    proj_anchor + "\nfunction invProj([x,y]){const b=S.b,s=Math.min((W-2*PAD)/(b.c-b.a),(H-2*PAD)/(b.d-b.b)),dw=(b.c-b.a)*s,dh=(b.d-b.b)*s;return[b.a+(x-(W-dw)/2)/s,b.d-(y-(H-dh)/2)/s]}",
     "inverse projection",
 )
 
