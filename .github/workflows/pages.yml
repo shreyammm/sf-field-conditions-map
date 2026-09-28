@@ -32,7 +32,10 @@ jobs:
           python-version: "3.12"
 
       - name: Build self-contained site
-        run: python scripts/build_site.py
+        run: |
+          python scripts/build_site.py
+          python scripts/add_hills.py
+          python scripts/patch_hill_ui.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
