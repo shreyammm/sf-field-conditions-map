@@ -34,8 +34,9 @@ jobs:
       - name: Install spatial dependency
         run: python -m pip install --disable-pip-version-check shapely==2.1.2
 
-      - name: Build self-contained site
+      - name: Build and audit self-contained site
         run: |
+          python scripts/audit_permit_dedupe_source.py
           python scripts/build_site.py
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
@@ -47,6 +48,8 @@ jobs:
           python scripts/prepare_surface_banner.py
           python scripts/patch_surface_permit_ui.py
           python scripts/refine_surface_permit_ui.py
+          python scripts/finalize_audit_ui.py
+          python scripts/audit_build.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
