@@ -63,3 +63,11 @@ The sanity audit found one exact duplicate parcel ID and geometry in the current
 **Status:** approved
 
 The map includes an in-product methodology key. Each legend category explains what it means, precinct provenance is stated, “parcel” is defined, unit-count thresholds are documented, excluded geographies are explained, and the current threshold counts / land-use snapshot date are shown from the bundled data.
+
+## D010 — Active SF street centerlines are the route backbone
+**Date:** 2026-09-27
+**Status:** approved
+
+Use SF Public Works / DataSF `Streets – Active and Retired` (`3psu-pn9h`) as both the visual street network and the canonical segment geography for later street-based layers. The deployed map retains only `active = true` records and preserves each segment's Centerline Network Number (CNN), street name, cross streets, class code, jurisdiction, and geometry.
+
+Street class codes are used only to create a readable visual hierarchy. They are not a canvassing score. Future hill grade, temporary closure, and construction information should attach to these same CNN segments where the public source permits a reliable join.
