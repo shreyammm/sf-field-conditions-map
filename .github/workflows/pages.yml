@@ -40,6 +40,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
+          python scripts/flag_low_confidence_hills.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
