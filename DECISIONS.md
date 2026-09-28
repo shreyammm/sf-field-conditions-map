@@ -84,12 +84,30 @@ For exact duplicate parcel rows with identical geometry, conflicting unit values
 
 ## D012 — Hill steepness uses direct official contour crossings
 **Date:** 2026-09-28
+**Status:** revised after second sanity audit
+
+The hill layer derives a street-level steepness estimate from DataSF Elevation Contours (`rnbg-2qxw`), which publishes 5-foot contour lines. The production method directly intersects each non-freeway displayed Public Works street centerline with those contours.
+
+Two prototype approaches were rejected before deployment: nearby-contour interpolation and a smoothed interpolation variant. Both produced implausible 60%+ values on ordinary streets. The later direct-crossing method removed that failure mode, but a second audit found a subtler upward-bias risk: it counted only intervals between different contour elevations and therefore could silently omit directly supported same-elevation spans.
+
+The revised production method treats consecutive same-elevation crossings as zero net rise across that supported span. Nonzero consecutive crossings must differ by approximately the documented 5-foot contour interval; non-5-foot jumps and implausible >45% short-span intervals are rejected instead of clipped. Accepted intervals are combined by directly supported along-street distance. Confidence also incorporates what fraction of the whole street segment is supported by accepted contour intervals.
+
+Freeway mainlines and ramps are marked `not_applicable` rather than receiving a canvassing hill classification. Streets without enough direct contour evidence remain `unavailable`. Low-confidence estimates are visually faded/dashed.
+
+The displayed value is labeled a **contour-supported grade estimate** because it describes the supported portions of the segment and is not an official engineering street-grade survey or guaranteed full-segment average. Display buckets remain `<5%`, `5–9.9%`, `10–14.9%`, `15–19.9%`, and `20%+`.
+
+## D013 — Temporary closures use official SFMTA line geometry and SF-local time
+**Date:** 2026-09-28
 **Status:** production methodology, pending user visual review
 
-The hill layer derives a street-level running-grade estimate from DataSF Elevation Contours (`rnbg-2qxw`), which publishes 5-foot contour lines. The production method directly intersects each displayed Public Works street centerline with those contours and computes rise/run between consecutive crossings of different known elevations.
+Use SFMTA / DataSF Temporary Street Closures (`8x25-yybr`) as the temporary-closure layer. Render the official closure line geometry directly rather than replacing it with an inferred precinct or full-street highlight.
 
-A first experimental method estimated elevations from nearby contours using interpolation. It produced implausible 60%+ street grades and was rejected by the build guardrail before deployment. We do not cap those bad values into a plausible-looking range.
+Although DataSF documentation describes the published dataset as permitted closures, the 2026-09-28 download also contains rows in application/workflow statuses. Production therefore explicitly keeps only `status = Permitted`. Rows must also have line geometry and a valid `start_dt <= end_dt` window.
 
-The direct-crossing method leaves a street unclassified when there is not enough direct contour evidence. It reports high/medium/low confidence based on the number of usable contour intervals, distinct contour elevations, and directly supported street length. Low-confidence estimates are visually faded/dashed. This is an analytical route-planning estimate, not an official engineering street-grade survey.
+The date/time control is explicitly labeled **San Francisco**. The browser initializes the control using `America/Los_Angeles`, independent of the viewer's device timezone. A closure is shown when the selected SF local wall time is inclusively between the source `start_dt` and `end_dt` values.
 
-Displayed buckets are `<5%`, `5–9.9%`, `10–14.9%`, `15–19.9%`, and `20%+`. Freeways and ramps remain context rather than emphasized canvassing streets.
+CNN is retained and checked against the street backbone as a validation signal, but source closure geometry remains authoritative for rendering. A missing/unmatched CNN does not cause a valid official closure line to be discarded.
+
+The layer is described as an SFMTA-permitted street/vehicle disruption indicator. It must not claim that pedestrian passage is necessarily blocked, and it must state that SFMTA's feed does not include every closure managed by Public Works, SFPD, or other departments.
+
+Because the current closure rows do not expose a usable `data_as_of` value, the UI reports when the snapshot was **retrieved** rather than inventing a source date. The automated production build refreshes daily; a failed refresh leaves the prior successful Pages deployment in place.
