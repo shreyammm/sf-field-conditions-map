@@ -68,21 +68,48 @@ Real but nonstandard context can remain: private streets, unpaved rights-of-way,
 - **Use:** derive the hill-steepness overlay on the displayed Public Works street centerlines
 - **Official GeoJSON:** `https://data.sf.gov/api/v3/views/rnbg-2qxw/query.geojson?accessType=DOWNLOAD`
 - **Source meaning:** 5-foot elevation contours for San Francisco mainland and Treasure Island/Yerba Island, based on the San Francisco Elevation Datum.
-- **Production method:** directly intersect each displayed street centerline with contour lines; order crossings along the street; calculate rise/run between consecutive crossings of different known elevations; combine usable intervals by supported street distance.
-- **No interpolation fallback:** streets without enough direct contour crossings remain unclassified rather than receiving a guessed value.
-- **Confidence:** high/medium/low based on usable crossing intervals, distinct contour levels, and supported street distance. Low-confidence estimates are visually faded/dashed.
-- **Guardrails:** reject degenerate crossing intervals and individual crossing artifacts over 45%; fail for unexpectedly low coverage or an implausibly large share of 20%+ classifications.
-- **Interpretation:** analytical route-planning estimate only, not an official Public Works engineering street-grade survey.
+- **Production method:** directly intersect each applicable street centerline with contour lines. Consecutive same-elevation crossings contribute zero net rise across their directly supported span. A nonzero consecutive crossing must differ by approximately 5 feet, matching the source contour interval. Accepted intervals are combined by directly supported along-street distance.
+- **No interpolation fallback:** streets without enough direct contour evidence remain `unavailable`; freeway mainlines and ramps are `not_applicable` for the canvassing hill layer.
+- **Confidence:** high/medium/low based on usable crossing intervals, distinct contour levels, supported street distance, and supported fraction of the full street segment. Low-confidence estimates are visually faded/dashed.
+- **Guardrails:** reject ambiguous same-location/different-elevation crossings, non-5-foot elevation jumps, degenerate spans, and >45% short-span crossing artifacts. Fail for unexpectedly low coverage or an implausibly large share of 20%+ classifications.
+- **Interpretation:** contour-supported route-planning estimate over directly supported portions of the street segment; not an official Public Works engineering street-grade survey.
 
-The first experimental hill method interpolated a continuous elevation estimate from nearby contours. It generated implausible 60%+ street grades and was rejected before deployment. The direct-crossing method is the production method because it relies only on observed contour elevations at actual street intersections.
+Two interpolation prototypes were rejected before deployment after producing implausible 60%+ values. A later audit also found that an earlier direct-crossing version could bias values upward by silently omitting same-elevation supported spans. The current v2 method explicitly includes those spans as zero net rise and records segment coverage.
 
-The current direct-crossing build classified 9,062 of 15,901 displayed street segments. The remaining 6,839 are explicitly unavailable. See `validation/CHECKPOINT_5_HILLS.md` for the current distribution and confidence counts.
+In the 2026-09-28 audited build, 15,682 non-freeway/ramp street segments were applicable; 9,375 received a grade estimate, 6,307 remained unavailable, and 219 freeway/ramp segments were marked not applicable. Confidence among classified segments was 4,688 high, 2,006 medium, and 2,681 low. See `validation/CHECKPOINT_5_HILLS.md`.
+
+## S005 — Temporary Street Closures
+
+- **Agency:** San Francisco Municipal Transportation Agency / DataSF
+- **Dataset ID:** `8x25-yybr`
+- **Use:** time-filtered temporary street/vehicle-disruption overlay
+- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/8x25-yybr/query.geojson?accessType=DOWNLOAD`
+- **Documented scope:** upcoming/current temporary closures associated with Shared Spaces, certain special events, and some construction work. SFMTA documentation says the feed covers SFMTA-permitted closures and does not include every closure managed by Public Works, SFPD, or other departments.
+- **Production filter:** `status = Permitted`, valid LineString/MultiLineString geometry, and valid `start_dt <= end_dt`.
+- **Retained fields:** case number/name, closure type/status, `start_dt`, `end_dt`, location description, CNN, street/from/to, direction, vehicle impact, info, and official line geometry.
+- **Time interpretation:** the UI treats `start_dt` and `end_dt` as San Francisco local wall times and shows a feature when `start_dt <= selected SF local time <= end_dt`. The date/time control initializes using the `America/Los_Angeles` time zone even for viewers elsewhere.
+- **Geometry rule:** render SFMTA's official closure line geometry directly. CNN is retained and compared with the Public Works street backbone for validation but is not required to render a valid official closure line.
+- **Interpretation:** street/vehicle disruption indicator only. A closure line does not prove that pedestrian passage is prohibited.
+- **Freshness:** the source documentation describes the report as daily. Current rows did not expose a usable `data_as_of` field, so the product reports the build/retrieval date rather than inventing one. The production workflow refreshes daily.
+
+### 2026-09-28 source audit
+
+The official download contained 4,628 rows. Although the source documentation says the dataset contains permitted temporary closures, the download also contained workflow/application statuses. Production explicitly filtered them rather than relying on the documentation alone:
+
+- `Permitted`: 4,283 — embedded
+- `Application In Review`: 216 — excluded
+- `Submitted`: 92 — excluded
+- `Pending Payment`: 29 — excluded
+- `Pending Additional Information`: 7 — excluded
+- `On Hold`: 1 — excluded
+
+All 4,283 embedded features had line geometry, valid time windows, and unique object IDs. Of 4,283 embedded rows with a CNN, 4,281 matched a displayed Public Works street CNN; the two unmatched rows remain renderable because the official SFMTA line geometry is the displayed geometry. Embedded closure types were 3,139 Roadway Shared Spaces, 885 Special Events, and 259 Special Traffic Permits.
 
 ## Build-time provenance
 
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; housing threshold counts and excluded geography counts; duplicate parcel anomalies; `data_as_of` when available; and upstream row-update timestamps when exposed by Socrata metadata.
+Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; `data_as_of` when available; and upstream row-update timestamps when exposed by Socrata metadata.
 
-The production geometry and derived street-grade attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
+The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
 
 ## Candidate future sources
 
@@ -90,11 +117,6 @@ The production geometry and derived street-grade attributes are embedded into `_
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `3vv2-nvev`
 - **Candidate use:** independent historical cross-check of steep areas; not a substitute for street-segment grade.
-
-### Temporary Street Closures
-- **Agency:** SFMTA / DataSF
-- **Dataset ID:** `8x25-yybr`
-- **Candidate use:** date/time-filtered street overlay; prefer CNN joins where present and validate spatial matching otherwise.
 
 ### Street-Use Permits
 - **Agency:** San Francisco Public Works / DataSF
