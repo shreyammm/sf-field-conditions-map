@@ -36,7 +36,7 @@ In the 2026-09-28 source snapshot among records with 20+ units:
 - `multiple_parcels`: 33 — excluded from the parcel fill layer
 - `analytical`: 25 — excluded from the parcel fill layer
 
-One exact duplicate parcel row is present in that snapshot. After deduplication there are 2,248 unique 20+ unit parcels, with current threshold counts of 2,248 at 20+, 811 at 50+, 384 at 100+, and 120 at 200+.
+One repeated parcel record is present in that snapshot. After controlled resolution there are 2,248 unique 20+ unit parcels, with threshold counts of 2,248 at 20+, 811 at 50+, 384 at 100+, and 120 at 200+.
 
 ### Duplicate handling
 
@@ -48,7 +48,7 @@ Parcel `6311016` appears twice in the current source with identical parcel ID/ge
 - **Dataset ID:** `3psu-pn9h`
 - **Use:** visual street network and canonical street-segment geography for hill, closure, and construction layers
 - **Official GeoJSON:** `https://data.sf.gov/api/v3/views/3psu-pn9h/query.geojson?accessType=DOWNLOAD`
-- **Source meaning:** Public Works street centerlines. `cnn` is the unique Centerline Network Number for a segment in the dataset. `active = true` means the segment is not retired; it does not guarantee public access or even that every source-layer line is a physical street.
+- **Source meaning:** Public Works street centerlines. `cnn` is the Centerline Network Number for a segment in the dataset. `active = true` means the segment is not retired; it does not guarantee public access or even that every source-layer line is a physical street.
 - **Class codes:** 1 freeway; 2 major street/highway; 3 arterial; 4 collector; 5 residential; 6 freeway ramp; 0 other.
 - **Retained fields:** `cnn`, official street name/type/full name, endpoint streets/nodes, class code, source layer, jurisdiction, active/accepted/one-way fields when present, analysis neighborhood, `data_as_of`, and geometry.
 
@@ -85,7 +85,7 @@ In the 2026-09-28 audited build, 15,682 non-freeway/ramp street segments were ap
 - **Use:** time-filtered temporary street/vehicle-disruption overlay
 - **Official GeoJSON:** `https://data.sf.gov/api/v3/views/8x25-yybr/query.geojson?accessType=DOWNLOAD`
 - **Documented scope:** upcoming/current temporary closures associated with Shared Spaces, certain special events, and some construction work. SFMTA documentation says the feed covers SFMTA-permitted closures and does not include every closure managed by Public Works, SFPD, or other departments.
-- **Production filter:** `status = Permitted`, valid LineString/MultiLineString geometry, and valid `start_dt <= end_dt`.
+- **Production filter:** status must explicitly equal `Permitted`; rows also need a non-empty object ID, valid LineString/MultiLineString geometry, and valid `start_dt <= end_dt`.
 - **Retained fields:** case number/name, closure type/status, `start_dt`, `end_dt`, location description, CNN, street/from/to, direction, vehicle impact, info, and official line geometry.
 - **Time interpretation:** the UI treats `start_dt` and `end_dt` as San Francisco local wall times and shows a feature when `start_dt <= selected SF local time <= end_dt`. The date/time control initializes using the `America/Los_Angeles` time zone even for viewers elsewhere.
 - **Geometry rule:** render SFMTA's official closure line geometry directly. CNN is retained and compared with the Public Works street backbone for validation but is not required to render a valid official closure line.
@@ -115,18 +115,24 @@ All 4,283 embedded features had line geometry, valid time windows, and unique ob
 - **Source geometry:** point locations. Production renders those points directly and does not infer a work-zone polygon or closure line.
 - **Production permit types:** `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, and `StreetSpace`.
 - **Excluded source types:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, and blank/unclassified permit types. Those may be legitimate street uses but are not a clean construction/physical-ROW-occupancy signal for this route layer.
-- **Status rule:** embedded records must be `ACTIVE` or `APPROVED` and have valid SF point geometry plus a valid permit start/end window.
+- **Status rule:** source rows must be `ACTIVE` or `APPROVED` and have valid SF point geometry, a permit number, and a valid permit start/end window.
 - **Date interpretation:** a point is eligible for display when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
 - **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production anchors the supported range to the actual San Francisco retrieval date and suppresses the layer outside the current/upcoming window. Row-level `data_as_of` varies by record and is not used as the snapshot date.
 - **Interpretation:** potential street/sidewalk work or occupancy context only. A permit is not proof of a closure, obstruction, exact work footprint, or pedestrian inaccessibility.
-- **Presentation:** opt-in/off by default because thousands of permit points may overlap one date and would otherwise obscure the route map.
+- **Presentation:** opt-in/off by default because thousands of permit authorization windows may overlap one date. When disabled, the browser does not create hidden permit SVG markers.
 - **Freshness:** refreshed daily with the rest of the dynamic public-data layers.
+
+### Co-located source rows
+
+The full audit found an important source behavior that the first implementation mislabeled as simple deduplication. The audited source had **141 additional rows sharing 50 permit/type/point/date-window keys**. In **46 of those marker groups**, source rows had different street/cross-street descriptors. This is consistent with a permit having multiple textual locations while DataSF supplies the same representative point geometry for those rows.
+
+Production therefore does **not** call those rows exact duplicates. Rows are aggregated to one map marker only when they have the same permit number, permit type, exact source point, and permit start/end window. The marker retains all distinct source street/cross-street pairs, descriptions, statuses, neighborhoods, districts, and relevant row timestamps. Hover/click explains when multiple source rows or source street locations share one point. This preserves the source information without drawing dozens of identical overlapping circles or pretending that the point identifies every work location precisely.
 
 ### 2026-09-28 source audit
 
-The official current/upcoming download contained 4,843 rows: 3,710 with status `APPROVED` and 1,133 `ACTIVE`. The source mixes work permits with vending/amenity uses. After applying the route-relevant type filter, validating date windows/point geometry, and collapsing exact duplicate permit-location/date/type rows, **4,231 unique permit points** were embedded.
+The official current/upcoming download contained 4,843 rows: 3,710 with status `APPROVED` and 1,133 `ACTIVE`. The source mixes work permits with vending/amenity uses. After applying the route-relevant type filter and validating point/date/permit-number fields, the eligible rows are grouped using the co-location rule above, yielding **4,231 permit markers** from **4,372 eligible source rows** in the audited snapshot. The difference is the 141 additional co-located source rows described above; they are represented in marker metadata rather than discarded.
 
-Embedded type counts were:
+Marker type counts were:
 
 - Excavation: 3,692
 - Temporary occupancy (`TempOccup`): 358
@@ -137,13 +143,13 @@ Embedded type counts were:
 - Minor encroachment (`MinorEnc`): 1
 - Street space (`StreetSpace`): 1
 
-The build omitted 469 source rows whose permit type was outside the construction/ROW filter, 141 exact duplicate rows, and 2 rows with invalid/missing permit date windows. The latest retained row-level `data_as_of` value was `2026-09-25T03:27:20.780`, but that field varies by record and is **not** used as the snapshot date. The audited build retrieved the source at `2026-09-27T23:12:23-07:00`, so the product treats **2026-09-27 through 2026-10-11** as that snapshot's supported current/upcoming window. On 2026-09-27, 3,921 embedded permit windows overlapped the date, which is why this dense layer is off by default.
+The route-type filter excludes 469 non-work/unclassified source rows; two source rows in the audited snapshot had invalid/missing permit date windows. The latest retained row-level `data_as_of` value is tracked for diagnostics but is **not** used as the snapshot date. The supported range is recalculated each build from the actual San Francisco retrieval date through 14 days later. On the initial audited 2026-09-27 snapshot, 3,921 marker authorization windows overlapped that date, which is why this dense layer is off by default.
 
-## Build-time provenance
+## Build-time provenance and deployment audit
 
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, duplicate/exclusion counts, SF retrieval time and supported date range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
+Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, co-located-row aggregation counts, SF retrieval time and supported date range; housing threshold counts and excluded geography counts; parcel-source anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
 
-The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
+The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map. A separate final-artifact audit runs before deployment and checks the finished embedded data/UI against the documented invariants. A failed audit prevents a new Pages deployment and leaves the prior successful version live.
 
 ## Related / candidate sources
 
