@@ -98,13 +98,13 @@ The displayed value is labeled a **contour-supported grade estimate** because it
 
 ## D013 — Temporary closures use official SFMTA line geometry and SF-local time
 **Date:** 2026-09-28
-**Status:** audited production methodology; tightened by D015
+**Status:** audited production methodology; revised by D016
 
 Use SFMTA / DataSF Temporary Street Closures (`8x25-yybr`) as the temporary-closure layer. Render the official closure line geometry directly rather than replacing it with an inferred precinct or full-street highlight.
 
 Although DataSF documentation describes the published dataset as permitted closures, the 2026-09-28 download also contains rows in application/workflow statuses. Production therefore explicitly keeps only `status = Permitted`. Rows must also have line geometry and a valid `start_dt <= end_dt` window.
 
-The date/time control is explicitly labeled **San Francisco**. The browser initializes the control using `America/Los_Angeles`, independent of the viewer's device timezone. A closure is shown when the selected SF local wall time is inclusively between the source `start_dt` and `end_dt` values.
+The original implementation filtered by an exact selected San Francisco local time. D016 replaces that interaction with an optional calendar-date planner while retaining the source start/end times for details.
 
 CNN is retained and checked against the street backbone as a validation signal, but source closure geometry remains authoritative for rendering. A missing/unmatched CNN does not cause a valid official closure line to be discarded.
 
@@ -114,7 +114,7 @@ Because the current closure rows do not expose a usable `data_as_of` value, the 
 
 ## D014 — Street-work / ROW permits are point-level authorization context, not closures
 **Date:** 2026-09-28
-**Status:** revised by D015
+**Status:** revised by D015 and D016
 
 Use SF Public Works / DataSF `Active and upcoming street surface permits` (`bpc9-7sus`) for the construction/right-of-way context layer rather than treating the much larger historical Street-Use Permits table as if every historical record were currently relevant.
 
@@ -139,3 +139,21 @@ The audit also found two UI/engineering issues. The shared date/time control had
 Closure filtering was tightened to require an explicit `Permitted` status; a blank status can no longer slip through as implicitly acceptable.
 
 A separate final-artifact audit now runs on every build **before GitHub Pages deployment**. It re-checks layer counts, geometry types, IDs, street exclusions, parcel geography/thresholds, hill fields and distributions, closure status/time/CNN behavior, permit aggregation and privacy fields, provenance IDs, UI defaults, external dependencies/runtime fetches, duplicate HTML IDs, and inline JavaScript syntax. If any invariant fails, deployment is skipped and the previous successful Pages version remains live.
+
+## D016 — Planning date is optional; closures are shown for any overlap with that day
+**Date:** 2026-09-28
+**Status:** approved by user and deployed
+
+Do not initialize the map to “now.” The map opens with **no planning date selected**, so temporary closure lines and date-dependent permit markers are absent until the user explicitly chooses a date.
+
+The control is a San Francisco **calendar date**, not a timestamp. A closure is displayed when its official local interval overlaps any portion of the selected day:
+
+`closure_start < next_day_00:00 AND closure_end >= selected_day_00:00`
+
+This means a closure scheduled only for 6–10 PM still appears when planning that date in the morning. The closure's exact official start/end hours remain visible in hover/click details.
+
+The closure toggle remains on by default so selecting a date immediately reveals closures for that day. The dense Public Works ROW-permit layer remains off by default; if enabled, it uses the same selected calendar date and continues to respect the permit snapshot's supported current/upcoming window.
+
+The date control includes **Today** (computed in `America/Los_Angeles`) and **Clear**. Clearing the date removes both date-dependent overlays without changing the stable street, hill, precinct, or high-unit residential layers.
+
+A dedicated post-mutation audit verifies that the final deployed HTML uses a date input, has no default date, applies day-overlap closure logic, retains exact closure-time detail, keeps ROW permits opt-in, and introduces no duplicate IDs, runtime fetches, external dependencies, or JavaScript syntax errors.
