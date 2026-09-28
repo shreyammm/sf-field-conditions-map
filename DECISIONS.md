@@ -111,3 +111,17 @@ CNN is retained and checked against the street backbone as a validation signal, 
 The layer is described as an SFMTA-permitted street/vehicle disruption indicator. It must not claim that pedestrian passage is necessarily blocked, and it must state that SFMTA's feed does not include every closure managed by Public Works, SFPD, or other departments.
 
 Because the current closure rows do not expose a usable `data_as_of` value, the UI reports when the snapshot was **retrieved** rather than inventing a source date. The automated production build refreshes daily; a failed refresh leaves the prior successful Pages deployment in place.
+
+## D014 — Street-work / ROW permits are point-level authorization context, not closures
+**Date:** 2026-09-28
+**Status:** production methodology, pending user visual review
+
+Use SF Public Works / DataSF `Active and upcoming street surface permits` (`bpc9-7sus`) for the construction/right-of-way context layer rather than treating the much larger historical Street-Use Permits table as if every historical record were currently relevant.
+
+The source mixes construction/occupancy permits with vending and amenity uses. For route context, production keeps only the permit types `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, and `StreetSpace`. Vending, food-facility, parklet, blank-type, and NightNoise rows are excluded from this layer because they are not a clean physical-work/ROW-occupancy signal.
+
+Render the official source **point** geometry. Do not stretch a point into a street segment, parcel, or work-zone polygon unless a future official source provides that extent. An overlapping permit window means the City has authorized street/sidewalk use during that period; it does **not** prove crews are physically working at the selected moment, that the street is closed, or that pedestrians cannot pass.
+
+Permit rows are filtered by the selected San Francisco **calendar date**, inclusive of the permit start/end dates, because many source windows are day-level rather than precise operational hours. The source is a current/upcoming snapshot (current permits plus starts in the near-term window), so the map suppresses the permit layer outside the documented snapshot support range rather than implying historical or far-future completeness.
+
+The layer is opt-in/off by default because several thousand valid permit points can overlap one date and would otherwise obscure the core street/parcel/closure map. Exact duplicate permit-location/date/type rows are collapsed at build time and logged in the manifest. Production refreshes daily.
