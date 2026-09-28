@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Closures and street-surface permits are daily feeds, so refresh daily.
+    # Closures, street-surface permits, and SFPD incidents are daily feeds.
     - cron: "17 14 * * *"
 
 permissions:
@@ -40,6 +40,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
+          python scripts/add_incidents.py
           python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
@@ -56,7 +57,10 @@ jobs:
           python scripts/audit_build.py
           # Final product model: no date by default; day-level closure overlap.
           python scripts/optional_planning_date_ui.py
+          # Recent SFPD incidents are an independent, opt-in lookback layer.
+          python scripts/patch_incident_ui.py
           python scripts/audit_planning_date.py
+          python scripts/audit_incidents.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
