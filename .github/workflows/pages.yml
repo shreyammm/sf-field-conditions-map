@@ -61,8 +61,11 @@ jobs:
           python scripts/optional_planning_date_ui.py
           # Short-window public-safety activity: 1–48h, live API + fallback.
           python scripts/patch_live_calls_ui.py
+          # Final visual/provenance pass: forest-green safety markers and
+          # direct official DataSF links throughout the methodology key.
+          python scripts/finalize_source_links_and_safety_color.py
           python scripts/audit_planning_date.py
-          python scripts/audit_live_calls.py
+          python scripts/audit_live_calls_v2.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
