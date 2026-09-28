@@ -20,6 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_status: ${{ steps.pages.outcome }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -32,17 +34,26 @@ jobs:
       - name: Build self-contained site
         run: python scripts/build_site.py
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
+      - name: Upload inspectable build artifact
+        uses: actions/upload-artifact@v4
         with:
-          enablement: true
+          name: built-site
+          path: _site
+          retention-days: 7
+
+      - name: Configure Pages
+        id: pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
+    if: needs.build.outputs.pages_status == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
