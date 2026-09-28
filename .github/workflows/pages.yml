@@ -34,8 +34,9 @@ jobs:
       - name: Build self-contained site
         run: |
           python scripts/build_site.py
-          python scripts/add_hills.py
+          python scripts/run_hills.py
           python scripts/patch_hill_ui.py
+          python scripts/fix_hill_text.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
