@@ -8,6 +8,7 @@ browser therefore makes no DataSF requests when somebody opens the map.
 
 from __future__ import annotations
 
+import collections
 import datetime as dt
 import json
 import pathlib
@@ -21,15 +22,10 @@ OUT = ROOT / "_site"
 PRECINCT_DATASET_ID = "d6x4-hefw"
 LAND_USE_DATASET_ID = "c5ge-t6pj"
 
-# Use the official downloadable distributions advertised in the federal
-# Data.gov catalog for data.sf.gov. These work better in CI than the browser-
-# oriented /resource endpoint, which may return HTTP 403 to hosted runners.
-PRECINCT_URL = (
-    "https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD"
-)
-LAND_USE_URL = (
-    "https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD"
-)
+# Official downloadable distributions. These work better in CI than the
+# browser-oriented Socrata /resource endpoint.
+PRECINCT_URL = "https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD"
+LAND_USE_URL = "https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD"
 PRECINCT_FALLBACK_URL = (
     "https://raw.githubusercontent.com/sfbay/datadiver/"
     "0eca631307a658be1e2b55ec3acde18f88ee11ec/"
@@ -44,6 +40,14 @@ LAND_USE_FIELDS = {
     "resunits_s",
     "geography_type",
     "data_as_of",
+    # Keep route-useful descriptive fields when present in the current source.
+    "address",
+    "street",
+    "streetname",
+    "from_st",
+    "to_st",
+    "restype",
+    "landuse",
 }
 
 HEADERS = {
@@ -59,7 +63,7 @@ def get_json(url: str, *, attempts: int = 3, timeout: int = 120):
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 return json.load(response)
-        except Exception as exc:  # network/API failures should fail the build clearly
+        except Exception as exc:
             last = exc
             if attempt < attempts:
                 time.sleep(attempt * 2)
@@ -84,6 +88,10 @@ def unit_count(feature: dict):
     return None
 
 
+def geography_type(feature: dict) -> str:
+    return str((feature.get("properties") or {}).get("geography_type") or "").strip().lower()
+
+
 def trim_feature_collection(fc: dict, allowed_fields: set[str], predicate=None) -> dict:
     features = []
     for f in fc.get("features", []):
@@ -105,8 +113,6 @@ def trim_feature_collection(fc: dict, allowed_fields: set[str], predicate=None) 
 
 def validate_precincts(fc: dict):
     n = len(fc["features"])
-    # A loose sanity range catches wrong endpoints/truncated responses without
-    # hard-coding today's exact count forever.
     if not (400 <= n <= 800):
         raise ValueError(f"Precinct sanity check failed: received {n} features")
 
@@ -115,9 +121,16 @@ def validate_multifamily(fc: dict):
     features = fc["features"]
     if len(features) < 100:
         raise ValueError(f"Multifamily sanity check failed: received only {len(features)} features")
-    bad = [f for f in features if unit_count(f) is None or unit_count(f) < 20]
-    if bad:
-        raise ValueError(f"Multifamily validation failed: {len(bad)} records lack a valid 20+ unit count")
+    bad_units = [f for f in features if unit_count(f) is None or unit_count(f) < 20]
+    if bad_units:
+        raise ValueError(
+            f"Multifamily validation failed: {len(bad_units)} records lack a valid 20+ unit count"
+        )
+    non_parcels = [f for f in features if geography_type(f) != "parcel"]
+    if non_parcels:
+        raise ValueError(
+            f"Multifamily validation failed: {len(non_parcels)} retained records are not parcel geography"
+        )
 
 
 def metadata(dataset_id: str) -> dict:
@@ -169,23 +182,42 @@ def fetch_precincts():
 
 def fetch_multifamily():
     raw = get_geojson(LAND_USE_URL)
-    # The official download contains the full current land-use snapshot. Filter
-    # locally so the deployed artifact contains only the 20+ unit records used
-    # by the UI, avoiding a runtime query and avoiding CI restrictions on the
-    # browser-oriented Socrata resource endpoint.
+
+    # First count all 20+ unit source records by SF Planning geography type.
+    source_20plus = [
+        f for f in raw.get("features", []) if f.get("geometry") and (unit_count(f) or 0) >= 20
+    ]
+    geography_counts = collections.Counter(geography_type(f) or "unknown" for f in source_20plus)
+
+    # For canvassing-route use, precision matters more than showing every
+    # planning aggregate. Retain only actual parcel-level geometries. Broad
+    # "analytical" areas caused misleading filled regions (e.g. Presidio);
+    # "multiple_parcels" are also withheld until we design a representation
+    # that does not imply one giant building/property footprint.
     fc = trim_feature_collection(
         raw,
         LAND_USE_FIELDS,
-        predicate=lambda f: (unit_count(f) or 0) >= 20,
+        predicate=lambda f: (unit_count(f) or 0) >= 20 and geography_type(f) == "parcel",
     )
     del raw
     validate_multifamily(fc)
-    return fc, {
-        "mode": "official",
-        "label": "SF Planning / DataSF",
-        "url": LAND_USE_URL,
-        "dataset_id": LAND_USE_DATASET_ID,
+
+    excluded = {
+        "analytical": int(geography_counts.get("analytical", 0)),
+        "multiple_parcels": int(geography_counts.get("multiple_parcels", 0)),
+        "unknown": int(geography_counts.get("unknown", 0)),
     }
+    return (
+        fc,
+        {
+            "mode": "official",
+            "label": "SF Planning / DataSF",
+            "url": LAND_USE_URL,
+            "dataset_id": LAND_USE_DATASET_ID,
+        },
+        dict(geography_counts),
+        excluded,
+    )
 
 
 def main():
@@ -194,7 +226,7 @@ def main():
 
     retrieved = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     precincts, precinct_source = fetch_precincts()
-    multifamily, multifamily_source = fetch_multifamily()
+    multifamily, multifamily_source, geography_counts, excluded = fetch_multifamily()
 
     p_meta = metadata(PRECINCT_DATASET_ID)
     m_meta = metadata(LAND_USE_DATASET_ID)
@@ -209,7 +241,9 @@ def main():
         "multifamily": {
             **multifamily_source,
             "feature_count": len(multifamily["features"]),
-            "filter": "resunits >= 20 (applied locally at build time)",
+            "display_filter": "resunits >= 20 AND geography_type = parcel",
+            "source_20plus_counts_by_geography_type": geography_counts,
+            "excluded_geographies": excluded,
             "data_as_of": newest_data_as_of(multifamily),
             "source_rows_updated_at": iso_from_unix(m_meta.get("rowsUpdatedAt")),
         },
@@ -222,13 +256,14 @@ def main():
             "precinct_source_url": precinct_source["url"],
             "multifamily_source_url": multifamily_source["url"],
             "multifamily_data_as_of": manifest["multifamily"]["data_as_of"],
+            "multifamily_display_filter": manifest["multifamily"]["display_filter"],
+            "excluded_geographies": excluded,
         },
         "precincts": precincts,
         "multifamily": multifamily,
     }
 
     packed = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    # Prevent any data value from accidentally terminating the script tag.
     packed = packed.replace("</", "<\\/")
     injection = "window.SF_FIELD_DATA=" + packed + ";"
 
@@ -248,8 +283,10 @@ def main():
     print(
         f"built {OUT / 'index.html'} with "
         f"{len(precincts['features'])} precincts and "
-        f"{len(multifamily['features'])} multifamily features"
+        f"{len(multifamily['features'])} parcel-level 20+ unit records"
     )
+    print(f"source 20+ geography counts: {dict(geography_counts)}")
+    print(f"excluded from apartment layer: {excluded}")
     print(f"manifest: {OUT / 'data-manifest.json'}")
 
 
