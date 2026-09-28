@@ -17,12 +17,24 @@ Official City and County of San Francisco / DataSF sources are preferred. Each p
 
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `c5ge-t6pj`
-- **Use:** large-multifamily property layer
+- **Use:** large residential parcel / apartment-access-friction proxy layer
 - **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD`
-- **Build filter:** the full official snapshot is downloaded, then `resunits >= 20` is applied locally during the build
-- **Fields retained:** `ludb_id`, `mapblklot`, `resunits`, `resunits_s`, `geography_type`, `data_as_of`, geometry
-- **Build validation:** at least 100 records, and every retained record must have a valid residential-unit count of 20+
-- **Interpretation:** rows can describe parcels, parcel groups, or analytical geography; unit count is a proxy for possible access friction and does not establish lobby/door accessibility
+- **Build filter:** the full official snapshot is downloaded, then the displayed layer retains only records where `resunits >= 20` and `geography_type = parcel`
+- **Fields retained when present:** `ludb_id`, `mapblklot`, `resunits`, `resunits_s`, `geography_type`, `data_as_of`, descriptive address/land-use fields, and geometry
+- **Build validation:** at least 100 retained records; every displayed record must have a valid 20+ residential-unit count and `geography_type = parcel`
+- **Interpretation:** a colored feature is one property parcel with the reported residential-unit count. A parcel boundary is not necessarily the building footprint, and unit count does not establish lobby/door accessibility.
+
+### Why non-parcel records are excluded from the displayed layer
+
+The current SF Planning source also contains `multiple_parcels` and `analytical` geographies. Filling those geometries made broad places such as parts of the Presidio look like giant apartment properties. That is misleading for canvassing-route use.
+
+Observed in the 2026-09-28 build among source records with 20+ units:
+
+- `parcel`: 2,249 records — displayed
+- `multiple_parcels`: 33 records — excluded pending a better visual treatment
+- `analytical`: 25 records — excluded
+
+The exact counts are recalculated on every build and written to the generated data manifest.
 
 ## Build-time provenance
 
@@ -30,9 +42,12 @@ Every successful build writes `_site/data-manifest.json` containing:
 
 - retrieval timestamp;
 - source URL and dataset ID for each layer;
-- feature counts;
+- displayed feature counts;
+- the apartment-layer display filter;
+- source 20+ unit counts by geography type;
+- counts of excluded analytical and multi-parcel records;
 - whether the precinct source was official or the documented fallback snapshot;
-- `data_as_of` for the multifamily dataset when available;
+- `data_as_of` for the land-use dataset when available;
 - upstream row-update timestamps when the Socrata metadata endpoint exposes them.
 
 The data are then embedded into `_site/index.html`. End users do not make DataSF requests when they open the deployed map.
