@@ -22,15 +22,9 @@ OUT = ROOT / "_site"
 PRECINCT_DATASET_ID = "d6x4-hefw"
 LAND_USE_DATASET_ID = "c5ge-t6pj"
 
-# Official downloadable distributions. These work better in CI than the
-# browser-oriented Socrata /resource endpoint.
+# Official City and County of San Francisco downloadable distributions.
 PRECINCT_URL = "https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD"
 LAND_USE_URL = "https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD"
-PRECINCT_FALLBACK_URL = (
-    "https://raw.githubusercontent.com/sfbay/datadiver/"
-    "0eca631307a658be1e2b55ec3acde18f88ee11ec/"
-    "public/data/elections/geo/prec-2022.geojson"
-)
 
 PRECINCT_FIELDS = {"prec_2022", "precinct", "id", "neigh22", "nhood", "neighborhood"}
 LAND_USE_FIELDS = {
@@ -92,6 +86,11 @@ def geography_type(feature: dict) -> str:
     return str((feature.get("properties") or {}).get("geography_type") or "").strip().lower()
 
 
+def parcel_key(feature: dict) -> str:
+    p = feature.get("properties") or {}
+    return str(p.get("mapblklot") or p.get("ludb_id") or "").strip()
+
+
 def trim_feature_collection(fc: dict, allowed_fields: set[str], predicate=None) -> dict:
     features = []
     for f in fc.get("features", []):
@@ -109,6 +108,44 @@ def trim_feature_collection(fc: dict, allowed_fields: set[str], predicate=None) 
             }
         )
     return {"type": "FeatureCollection", "features": features}
+
+
+def dedupe_exact_parcels(fc: dict):
+    """Resolve exact duplicate parcel records without hiding geometry conflicts.
+
+    SF Planning can contain duplicate rows for the same parcel ID. If the parcel
+    ID and geometry are identical, keep one record; when unit counts conflict,
+    keep the larger reported unit count and record the conflict in provenance.
+    If one parcel ID appears with different geometries, fail the build so that a
+    human can inspect it instead of guessing.
+    """
+    kept = {}
+    resolved = []
+    for feature in fc.get("features", []):
+        key = parcel_key(feature)
+        if not key:
+            raise ValueError("Displayed parcel record is missing both mapblklot and ludb_id")
+        if key not in kept:
+            kept[key] = feature
+            continue
+        previous = kept[key]
+        if previous.get("geometry") != feature.get("geometry"):
+            raise ValueError(f"Parcel {key} appears more than once with different geometries")
+        prev_units = unit_count(previous)
+        new_units = unit_count(feature)
+        if new_units is not None and (prev_units is None or new_units > prev_units):
+            kept[key] = feature
+        resolved.append(
+            {
+                "parcel_id": key,
+                "unit_counts_seen": sorted(
+                    {int(prev_units) if prev_units is not None else None, int(new_units) if new_units is not None else None},
+                    key=lambda x: -1 if x is None else x,
+                ),
+                "kept_units": int(max(x for x in (prev_units, new_units) if x is not None)),
+            }
+        )
+    return {"type": "FeatureCollection", "features": list(kept.values())}, resolved
 
 
 def validate_precincts(fc: dict):
@@ -131,6 +168,9 @@ def validate_multifamily(fc: dict):
         raise ValueError(
             f"Multifamily validation failed: {len(non_parcels)} retained records are not parcel geography"
         )
+    keys = [parcel_key(f) for f in features]
+    if len(keys) != len(set(keys)):
+        raise ValueError("Multifamily validation failed: duplicate parcel IDs remain after deduplication")
 
 
 def metadata(dataset_id: str) -> dict:
@@ -157,24 +197,24 @@ def newest_data_as_of(fc: dict):
     return max(vals) if vals else None
 
 
+def threshold_counts(fc: dict):
+    return {
+        str(threshold): sum((unit_count(f) or 0) >= threshold for f in fc["features"])
+        for threshold in (20, 50, 100, 200)
+    }
+
+
 def fetch_precincts():
-    try:
-        fc = get_geojson(PRECINCT_URL)
-        source = {
-            "mode": "official",
-            "label": "SF Department of Elections / DataSF",
-            "url": PRECINCT_URL,
-            "dataset_id": PRECINCT_DATASET_ID,
-        }
-    except Exception as exc:
-        print(f"warning: official precinct download failed; using documented public snapshot: {exc}")
-        fc = get_geojson(PRECINCT_FALLBACK_URL)
-        source = {
-            "mode": "fallback_snapshot",
-            "label": "Versioned public snapshot derived from SF Department of Elections data",
-            "url": PRECINCT_FALLBACK_URL,
-            "dataset_id": PRECINCT_DATASET_ID,
-        }
+    # Production uses only the official SF Elections / DataSF source. If this
+    # download fails, the workflow fails and GitHub Pages keeps the prior good
+    # deployment rather than silently substituting a third-party snapshot.
+    fc = get_geojson(PRECINCT_URL)
+    source = {
+        "mode": "official",
+        "label": "SF Department of Elections / DataSF",
+        "url": PRECINCT_URL,
+        "dataset_id": PRECINCT_DATASET_ID,
+    }
     fc = trim_feature_collection(fc, PRECINCT_FIELDS)
     validate_precincts(fc)
     return fc, source
@@ -183,7 +223,6 @@ def fetch_precincts():
 def fetch_multifamily():
     raw = get_geojson(LAND_USE_URL)
 
-    # First count all 20+ unit source records by SF Planning geography type.
     source_20plus = [
         f for f in raw.get("features", []) if f.get("geometry") and (unit_count(f) or 0) >= 20
     ]
@@ -200,6 +239,8 @@ def fetch_multifamily():
         predicate=lambda f: (unit_count(f) or 0) >= 20 and geography_type(f) == "parcel",
     )
     del raw
+
+    fc, duplicate_parcels_resolved = dedupe_exact_parcels(fc)
     validate_multifamily(fc)
 
     excluded = {
@@ -217,6 +258,7 @@ def fetch_multifamily():
         },
         dict(geography_counts),
         excluded,
+        duplicate_parcels_resolved,
     )
 
 
@@ -226,10 +268,17 @@ def main():
 
     retrieved = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     precincts, precinct_source = fetch_precincts()
-    multifamily, multifamily_source, geography_counts, excluded = fetch_multifamily()
+    (
+        multifamily,
+        multifamily_source,
+        geography_counts,
+        excluded,
+        duplicate_parcels_resolved,
+    ) = fetch_multifamily()
 
     p_meta = metadata(PRECINCT_DATASET_ID)
     m_meta = metadata(LAND_USE_DATASET_ID)
+    bins = threshold_counts(multifamily)
 
     manifest = {
         "retrieved_at": retrieved,
@@ -242,6 +291,9 @@ def main():
             **multifamily_source,
             "feature_count": len(multifamily["features"]),
             "display_filter": "resunits >= 20 AND geography_type = parcel",
+            "deduplication_rule": "same parcel ID + identical geometry => retain one record; conflicting unit counts => retain larger count and log conflict",
+            "duplicate_parcels_resolved": duplicate_parcels_resolved,
+            "threshold_counts": bins,
             "source_20plus_counts_by_geography_type": geography_counts,
             "excluded_geographies": excluded,
             "data_as_of": newest_data_as_of(multifamily),
@@ -258,6 +310,8 @@ def main():
             "multifamily_data_as_of": manifest["multifamily"]["data_as_of"],
             "multifamily_display_filter": manifest["multifamily"]["display_filter"],
             "excluded_geographies": excluded,
+            "duplicate_parcels_resolved": duplicate_parcels_resolved,
+            "threshold_counts": bins,
         },
         "precincts": precincts,
         "multifamily": multifamily,
@@ -283,10 +337,12 @@ def main():
     print(
         f"built {OUT / 'index.html'} with "
         f"{len(precincts['features'])} precincts and "
-        f"{len(multifamily['features'])} parcel-level 20+ unit records"
+        f"{len(multifamily['features'])} unique parcel-level 20+ unit records"
     )
+    print(f"threshold counts: {bins}")
     print(f"source 20+ geography counts: {dict(geography_counts)}")
     print(f"excluded from apartment layer: {excluded}")
+    print(f"duplicate parcels resolved: {duplicate_parcels_resolved}")
     print(f"manifest: {OUT / 'data-manifest.json'}")
 
 
