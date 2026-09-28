@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Closures are a daily SFMTA feed, so refresh the embedded public snapshot daily.
+    # Closures and street-surface permits are daily feeds, so refresh daily.
     - cron: "17 14 * * *"
 
 permissions:
@@ -36,14 +36,15 @@ jobs:
 
       - name: Build self-contained site
         run: |
-          python scripts/audit_surface_permits.py
           python scripts/build_site.py
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
+          python scripts/add_surface_permits.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
           python scripts/flag_low_confidence_hills.py
           python scripts/patch_closure_ui.py
+          python scripts/patch_surface_permit_ui.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
