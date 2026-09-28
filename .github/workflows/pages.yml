@@ -40,7 +40,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
-          python scripts/add_incidents_v3.py
+          python scripts/add_incidents_v4.py
           python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
