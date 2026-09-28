@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
-import json, urllib.request
-URL='https://data.sfgov.org/api/v3/views/wg3w-h783/query.json'
-H={'User-Agent':'sf-field-conditions-map-debug/1.0','Accept':'application/json','Content-Type':'application/json'}
-
-def q(query,page_size=5):
-    body=json.dumps({'query':query,'page':{'pageNumber':1,'pageSize':page_size},'includeSynthetic':False}).encode()
-    req=urllib.request.Request(URL,data=body,headers=H,method='POST')
-    with urllib.request.urlopen(req,timeout=180) as r: obj=json.load(r)
-    if isinstance(obj,list): return obj
-    for k in ('data','results','rows'):
-        if isinstance(obj,dict) and isinstance(obj.get(k),list): return obj[k]
-    print('RAW',type(obj),obj if isinstance(obj,dict) else str(obj)[:1000]); return []
-
-a='2026-09-28T00:00:00.000'; b='2026-09-29T00:00:00.000'
-where=f"`incident_datetime` >= '{a}' AND `incident_datetime` < '{b}' AND `latitude` IS NOT NULL AND `longitude` IS NOT NULL"
-queries=[
- ('all_group',f"SELECT `intersection`,`police_district`,`analysis_neighborhood`,`latitude`,`longitude`,count(distinct `incident_id`) AS report_count WHERE {where} GROUP BY `intersection`,`police_district`,`analysis_neighborhood`,`latitude`,`longitude` ORDER BY `latitude` ASC,`longitude` ASC LIMIT 5"),
- ('city_count',f"SELECT count(distinct `incident_id`) AS report_count WHERE {where} LIMIT 1"),
-]
-for name,query in queries:
+import json, urllib.parse, urllib.request, time
+H={'User-Agent':'sf-field-conditions-map-debug/1.0','Accept':'application/json'}
+params={'$select':'incident_id,incident_datetime,latitude,longitude','$where':"incident_datetime >= '2026-09-28T00:00:00.000' AND incident_datetime < '2026-09-29T00:00:00.000'",'$limit':'5','$order':'incident_datetime ASC'}
+for host in ('https://data.sf.gov','https://data.sfgov.org'):
+    url=host+'/resource/wg3w-h783.json?'+urllib.parse.urlencode(params)
+    t=time.time()
     try:
-        rows=q(query,5)
-        print(name,'LEN',len(rows),'ROWS',rows)
+        req=urllib.request.Request(url,headers=H)
+        with urllib.request.urlopen(req,timeout=30) as r:
+            rows=json.load(r)
+        print(host,'OK',round(time.time()-t,2),'rows',len(rows),'first',rows[:2])
     except Exception as e:
-        print(name,'ERR',repr(e))
+        print(host,'ERR',round(time.time()-t,2),repr(e))
