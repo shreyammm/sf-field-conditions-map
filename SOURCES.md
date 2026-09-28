@@ -7,7 +7,7 @@ Official City and County of San Francisco / DataSF sources are preferred. Each p
 - **Agency:** San Francisco Department of Elections / DataSF
 - **Dataset ID:** `d6x4-hefw`
 - **Use:** neutral precinct reference boundaries
-- **Build query:** `https://data.sfgov.org/resource/d6x4-hefw.geojson?$limit=1000`
+- **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD`
 - **Useful fields:** `prec_2022`; neighborhood labels when exposed by the source
 - **Build validation:** feature count must remain within a broad 400–800 sanity range
 - **Fallback:** a versioned public GeoJSON snapshot from `sfbay/datadiver`, itself derived from the SF Elections source
@@ -18,7 +18,8 @@ Official City and County of San Francisco / DataSF sources are preferred. Each p
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `c5ge-t6pj`
 - **Use:** large-multifamily property layer
-- **Build filter:** `resunits >= 20`
+- **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD`
+- **Build filter:** the full official snapshot is downloaded, then `resunits >= 20` is applied locally during the build
 - **Fields retained:** `ludb_id`, `mapblklot`, `resunits`, `resunits_s`, `geography_type`, `data_as_of`, geometry
 - **Build validation:** at least 100 records, and every retained record must have a valid residential-unit count of 20+
 - **Interpretation:** rows can describe parcels, parcel groups, or analytical geography; unit count is a proxy for possible access friction and does not establish lobby/door accessibility
