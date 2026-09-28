@@ -35,7 +35,16 @@ check('type="datetime-local"' not in html, "old date/time input remains")
 check('Plan for a date' in html and '(optional)' in html, "optional-date label missing")
 check('<input id="cToggle" type="checkbox" checked>' in html, "closure layer is not ready to appear after date selection")
 check('<input id="wToggle" type="checkbox">' in html, "dense ROW-permit layer is not off by default")
-check("S.ct='';$('cTime').value='';renderS();renderP();renderM();renderW();renderC();" in html, "map initializes with a planning date instead of no date")
+# Other independent layers may initialize between clearing the planning date and
+# the first render. What matters is that S.ct and the date input are empty before
+# date-dependent layers render.
+check(
+    bool(re.search(
+        r"S\.ct='';\$\('cTime'\)\.value='';(?:initIncidentControls\(\);)?renderS\(\);renderP\(\);renderM\(\);renderW\(\);renderC\(\);",
+        html,
+    )),
+    "map initializes with a planning date instead of no date",
+)
 check("$('cClear').onclick=()=>{S.ct='';$('cTime').value='';renderC();renderW()}" in html, "Clear does not remove date-dependent layers")
 check("$('cNow').onclick=()=>{S.ct=sfNowLocal().slice(0,10);$('cTime').value=S.ct;renderC();renderW()}" in html, "Today shortcut does not use SF calendar date")
 
