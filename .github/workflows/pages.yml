@@ -44,6 +44,7 @@ jobs:
           python scripts/fix_hill_text.py
           python scripts/flag_low_confidence_hills.py
           python scripts/patch_closure_ui.py
+          python scripts/prepare_surface_banner.py
           python scripts/patch_surface_permit_ui.py
 
       - name: Upload inspectable build artifact
