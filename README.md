@@ -26,7 +26,7 @@ The hill layer is an analytical contour-supported estimate, not an official engi
 
 The closure layer is an SFMTA street/vehicle-disruption indicator. It does not imply that pedestrian passage is blocked, and the SFMTA feed does not include every closure managed by other City departments.
 
-The street-work / ROW layer shows official Public Works permit **points**, not exact work footprints. A permit window means the City has authorized street/sidewalk use during that period; it does not prove crews are physically working at the selected moment, that the street is closed, or that pedestrians cannot pass. Because thousands of permit windows can overlap a date, this layer is off by default.
+The street-work / ROW layer shows official Public Works permit **points**, not exact work footprints. A permit window means the City has authorized street/sidewalk use during that period; it does not prove crews are physically working at the selected moment, that the street is closed, or that pedestrians cannot pass. Some permits publish multiple street-location rows at one official point; those rows are represented by one marker while all distinct source location text is retained in its details. Because thousands of permit windows can overlap a date, this layer is off by default and its SVG markers are not created until the layer is enabled.
 
 ## Architecture
 
@@ -37,12 +37,14 @@ GitHub Actions build
           ↓
 validation + documented filtering/derivation
           ↓
+final-artifact invariant audit
+          ↓
 self-contained data embedded into _site/index.html
           ↓
 GitHub Pages
 ```
 
-A failed source refresh does not replace the previously successful deployment.
+A failed source refresh **or failed final-artifact audit** does not replace the previously successful deployment.
 
 ## Build locally
 
@@ -59,6 +61,9 @@ python scripts/patch_closure_ui.py
 python scripts/prepare_surface_banner.py
 python scripts/patch_surface_permit_ui.py
 python scripts/refine_surface_permit_ui.py
+python scripts/finalize_audit_ui.py
+python scripts/finalize_permit_aggregation_ui.py
+python scripts/audit_build.py
 python -m http.server 8000 --directory _site
 ```
 
@@ -68,9 +73,11 @@ Then open `http://localhost:8000`.
 
 The live site is deployed with `.github/workflows/pages.yml` from `main`. GitHub Pages is configured to use **GitHub Actions**. The temporary-closure and current/upcoming street-surface permit sources are daily feeds, so the workflow refreshes the bundled public-data snapshot daily.
 
+Deployment only proceeds after the independent final-artifact audit passes. That audit checks the finished embedded data and UI rather than assuming each intermediate script produced the intended result.
+
 ## Sources and audit trail
 
-See [`SOURCES.md`](SOURCES.md) for dataset IDs, source semantics, filters, and caveats; [`DECISIONS.md`](DECISIONS.md) for consequential methodology choices; and `validation/` for review checkpoints. Each successful build also writes `_site/data-manifest.json` with retrieval time, source URLs, displayed/source counts, exclusions, hill coverage/confidence, closure status/type validation, surface-permit filtering/support-window metadata, threshold counts, and detected duplicate-source anomalies.
+See [`SOURCES.md`](SOURCES.md) for dataset IDs, source semantics, filters, and caveats; [`DECISIONS.md`](DECISIONS.md) for consequential methodology choices; and `validation/` for review checkpoints. Each successful build also writes `_site/data-manifest.json` with retrieval time, source URLs, displayed/source counts, exclusions, hill coverage/confidence, closure status/type validation, surface-permit aggregation/support-window metadata, threshold counts, and detected source anomalies.
 
 ## Scope guardrails
 
