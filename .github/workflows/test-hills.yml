@@ -1,0 +1,42 @@
+name: Test hill layer
+
+on:
+  push:
+    branches: [hill-layer-dev]
+    paths:
+      - scripts/build_site.py
+      - src/index.template.html
+      - .github/workflows/test-hills.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependency
+        run: python -m pip install shapely==2.1.2
+      - name: Build map from official sources
+        run: python scripts/build_site.py
+      - name: Static checks
+        run: |
+          python -m py_compile scripts/build_site.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('_site/index.html').read_text()
+          assert 'fetch(' not in text
+          assert 'Hill / steep street estimate' in text
+          assert 'hill_grade_pct' in text
+          print('self-contained hill UI checks passed')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hill-built-site
+          path: _site
+          retention-days: 3
