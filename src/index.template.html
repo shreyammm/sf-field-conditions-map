@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SF Field Conditions Map</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#eef2f6}*{box-sizing:border-box}html,body{height:100%;margin:0}body{overflow:hidden}.app{display:grid;grid-template-columns:350px minmax(0,1fr);height:100vh}.side{background:#fff;border-right:1px solid #e4e7ec;padding:20px;overflow:auto}.side h1{font-size:23px;line-height:1.15;margin:0 0 7px;color:#101828}.muted{font-size:12px;line-height:1.45;color:#667085}.sec{border-top:1px solid #eaecf0;margin-top:17px;padding-top:15px}.sec h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#475467;margin:0 0 10px}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0}.label{font-size:14px;font-weight:650;color:#344054}.switch{width:40px;height:23px;position:relative;flex:0 0 auto}.switch input{display:none}.switch span{position:absolute;inset:0;border-radius:99px;background:#d0d5dd;cursor:pointer}.switch span:before{content:"";position:absolute;width:17px;height:17px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.22);transition:.15s}.switch input:checked+span{background:#475467}.switch input:checked+span:before{transform:translateX(17px)}.pills{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.pill{padding:7px 3px;border:1px solid #d0d5dd;background:#fff;border-radius:7px;font:inherit;font-size:12px;color:#344054;cursor:pointer}.pill:hover{background:#f9fafb}.pill.active{background:#344054;color:#fff;border-color:#344054}.legend{display:flex;align-items:center;gap:8px;font-size:12px;margin:8px 0;color:#475467}.sw{width:18px;height:12px;border:1px solid rgba(0,0,0,.12);border-radius:3px;flex:0 0 auto}.ln{width:20px;border-top:2px solid #98a2b3;flex:0 0 auto}.status{font-size:12px;line-height:1.45}.status div{display:grid;grid-template-columns:92px 1fr;gap:8px;margin:6px 0}.status b{color:#344054}.detail{border:1px solid #eaecf0;background:#f9fafb;border-radius:9px;padding:11px;font-size:13px;line-height:1.5;min-height:84px}.mapwrap{position:relative;min-width:0;background:#e9edf1}.mapwrap svg{width:100%;height:100%;display:block;touch-action:none;cursor:grab}.mapwrap svg.drag{cursor:grabbing}.prec{fill:#fbfcfd;stroke:#98a2b3;stroke-width:.8;vector-effect:non-scaling-stroke}.prec:hover{fill:#f2f4f7;stroke:#344054;stroke-width:1.5}.mf{stroke:#344054;stroke-width:.35;vector-effect:non-scaling-stroke;cursor:pointer}.mf:hover{stroke:#101828;stroke-width:1.5}.b20{fill:#a7f3d0;fill-opacity:.66}.b50{fill:#67e8f9;fill-opacity:.72}.b100{fill:#818cf8;fill-opacity:.76}.b200{fill:#8b5cf6;fill-opacity:.82}.tip{display:none;position:absolute;pointer-events:none;z-index:8;max-width:340px;background:rgba(17,24,39,.96);color:#fff;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.4;box-shadow:0 8px 28px rgba(16,24,40,.22)}.tip strong{display:block;margin-bottom:3px}.tools{position:absolute;right:14px;top:14px;z-index:5;display:flex;gap:6px}.tools button{width:36px;height:36px;border:1px solid #d0d5dd;background:#fff;border-radius:8px;font-size:18px;color:#344054;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.08)}.tools button:hover{background:#f9fafb}.banner{position:absolute;left:18px;bottom:18px;background:rgba(255,255,255,.95);border:1px solid #d0d5dd;border-radius:9px;padding:8px 11px;font-size:12px;color:#475467;max-width:610px;z-index:5;box-shadow:0 2px 8px rgba(16,24,40,.08)}.fatal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;color:#b42318;background:#fef3f2;z-index:10}.ok{color:#067647}.warn{color:#b54708}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}@media(max-width:860px){body{overflow:auto}.app{grid-template-columns:1fr;grid-template-rows:auto 72vh;height:auto}.side{border-right:0;border-bottom:1px solid #e4e7ec}.mapwrap{min-height:72vh}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+<h1>SF Field Conditions Map</h1>
+<div class="muted">Public-data field planning. Precincts are reference boundaries; built-environment conditions stay at their natural geography.</div>
+
+<section class="sec"><h2>Layers</h2>
+<div class="row"><div><div class="label">Precinct boundaries</div><div class="muted">SF Department of Elections</div></div><label class="switch"><input id="pToggle" type="checkbox" checked><span></span></label></div>
+<div class="row"><div><div class="label">Large multifamily</div><div class="muted">SF Planning residential-unit count</div></div><label class="switch"><input id="mToggle" type="checkbox" checked><span></span></label></div>
+<div class="label" style="margin:12px 0 7px">Minimum residential units</div>
+<div class="pills" id="pills"><button class="pill active" data-n="20">20+</button><button class="pill" data-n="50">50+</button><button class="pill" data-n="100">100+</button><button class="pill" data-n="200">200+</button></div>
+<div class="muted" style="margin-top:9px">Large multifamily is a public unit-count proxy for possible access friction. It does not mean a building is confirmed inaccessible.</div>
+</section>
+
+<section class="sec"><h2>Legend</h2>
+<div class="legend"><span class="ln"></span>Election precinct boundary</div>
+<div class="legend"><span class="sw" style="background:#a7f3d0"></span>20–49 units</div>
+<div class="legend"><span class="sw" style="background:#67e8f9"></span>50–99 units</div>
+<div class="legend"><span class="sw" style="background:#818cf8"></span>100–199 units</div>
+<div class="legend"><span class="sw" style="background:#8b5cf6"></span>200+ units</div>
+</section>
+
+<section class="sec"><h2>Source status</h2>
+<div class="status"><div><b>Precincts</b><span id="ps">Reading embedded bundle…</span></div><div><b>Multifamily</b><span id="ms">Reading embedded bundle…</span></div><div><b>Threshold</b><span id="ts">20+ units</span></div><div><b>Built</b><span id="bs">—</span></div></div>
+</section>
+
+<section class="sec"><h2>Selected feature</h2><div class="detail" id="detail">Hover for a quick explanation. Click a precinct or multifamily property to pin details here.</div></section>
+<section class="sec"><h2>Data behavior</h2><div class="muted">Core layers are embedded at build time. Opening this page does not call DataSF. If a future refresh fails upstream, the previously deployed version remains available.</div></section>
+</aside>
+
+<main class="mapwrap" id="mapwrap">
+<div class="tools"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="home" aria-label="Reset map">⌂</button></div>
+<svg id="map" viewBox="0 0 1100 850" preserveAspectRatio="xMidYMid meet" aria-label="San Francisco field conditions map"><rect width="1100" height="850" fill="#e9edf1"/><g id="view"><g id="pl"></g><g id="ml"></g></g></svg>
+<div class="tip" id="tip"></div>
+<div class="banner">Core layers are bundled into this build — no DataSF request occurs when you open the map.</div>
+<div class="fatal" id="fatal"></div>
+</main>
+</div>
+
+<script>
+/*__SF_FIELD_DATA__*/
+</script>
+<script>
+(()=>{'use strict';
+const DATA=window.SF_FIELD_DATA;
+const W=1100,H=850,PAD=26;
+const $=id=>document.getElementById(id),svg=$('map'),view=$('view'),pl=$('pl'),ml=$('ml'),tip=$('tip'),detail=$('detail');
+const S={p:DATA?.precincts||null,m:DATA?.multifamily||null,b:null,n:20,sp:true,sm:true,z:1,x:0,y:0,drag:false,lx:0,ly:0};
+const esc=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+const fmtDate=v=>{if(!v)return'—';try{return new Date(v).toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}catch{return String(v)}};
+function fail(msg){const e=$('fatal');e.textContent=msg;e.style.display='flex'}
+function coords(g,o){if(!g||!g.coordinates)return;const c=g.coordinates;(function r(x){if(!Array.isArray(x))return;if(typeof x[0]==='number'&&typeof x[1]==='number')o.push(x);else x.forEach(r)})(c)}
+function bounds(fc){let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity,p=[];(fc?.features||[]).forEach(f=>coords(f.geometry,p));p.forEach(([x,y])=>{a=Math.min(a,x);c=Math.max(c,x);b=Math.min(b,y);d=Math.max(d,y)});return Number.isFinite(a)?{a,b,c,d}:null}
+function proj([lon,lat]){const b=S.b,s=Math.min((W-2*PAD)/(b.c-b.a),(H-2*PAD)/(b.d-b.b)),dw=(b.c-b.a)*s,dh=(b.d-b.b)*s;return[(W-dw)/2+(lon-b.a)*s,(H-dh)/2+(b.d-lat)*s]}
+function ring(r){return r.map((p,i)=>{const[x,y]=proj(p);return(i?'L':'M')+x.toFixed(1)+','+y.toFixed(1)}).join(' ')+' Z'}
+function path(g){if(!g)return'';if(g.type==='Polygon')return(g.coordinates||[]).map(ring).join(' ');if(g.type==='MultiPolygon')return(g.coordinates||[]).flatMap(p=>p.map(ring)).join(' ');return''}
+const pid=p=>p.prec_2022??p.precinct??p.id??'Unknown';
+const hood=p=>p.neigh22??p.nhood??p.neighborhood??'';
+const units=p=>Number(p.resunits??p.RESUNITS??p.resunits_s);
+const parcel=p=>p.mapblklot??p.ludb_id??'—';
+const bucket=n=>n>=200?'b200':n>=100?'b100':n>=50?'b50':'b20';
+function add(parent,d,cls,f,k){const e=document.createElementNS('http://www.w3.org/2000/svg','path');e.setAttribute('d',d);e.setAttribute('class',cls);e.dataset.k=k;e.f=f;parent.appendChild(e);bind(e)}
+function renderP(){pl.replaceChildren();(S.p?.features||[]).forEach(f=>{const d=path(f.geometry);if(d)add(pl,d,'prec',f,'p')});pl.style.display=S.sp?'':'none'}
+function renderM(){ml.replaceChildren();let n=0;(S.m?.features||[]).forEach(f=>{const u=units(f.properties||{});if(!Number.isFinite(u)||u<S.n)return;const d=path(f.geometry);if(d){add(ml,d,'mf '+bucket(u),f,'m');n++}});ml.style.display=S.sm?'':'none';$('ts').textContent=S.n+'+ units · '+n+' properties'}
+function hover(e){const p=e.f.properties||{};if(e.dataset.k==='p')return`<strong>Election precinct ${esc(pid(p))}</strong>${hood(p)?esc(hood(p))+'<br>':''}<span style="opacity:.82">Reference boundary from the SF Department of Elections.</span>`;const u=units(p);return`<strong>Large multifamily property</strong>${esc(Number.isFinite(u)?u:'Unknown')} residential units<br>Parcel / property ID: ${esc(parcel(p))}<br><span style="opacity:.82">Shown because it meets the selected ${S.n}+ unit threshold. This is a proxy for possible access friction, not confirmed inaccessibility.</span>`}
+function clicked(e){const p=e.f.properties||{};if(e.dataset.k==='p')return`<strong>Precinct ${esc(pid(p))}</strong>${hood(p)?esc(hood(p))+'<br>':''}<span class="muted">Reference geography only; other conditions remain at their natural geography.</span>`;const u=units(p),dt=p.data_as_of?'<br>Source data as of: '+esc(String(p.data_as_of).slice(0,10)):'';return`<strong>${esc(Number.isFinite(u)?u:'Unknown')}-unit multifamily property</strong>Parcel / property ID: ${esc(parcel(p))}${dt}<br><span class="muted">Why shown: this public SF Planning record meets the selected ${S.n}+ unit threshold. Building size does not establish lobby or door accessibility.</span>`}
+function bind(e){e.onpointermove=ev=>{tip.innerHTML=hover(e);tip.style.display='block';const r=$('mapwrap').getBoundingClientRect();let x=ev.clientX-r.left+12,y=ev.clientY-r.top+12;requestAnimationFrame(()=>{if(x+tip.offsetWidth>r.width-8)x=ev.clientX-r.left-tip.offsetWidth-12;if(y+tip.offsetHeight>r.height-8)y=ev.clientY-r.top-tip.offsetHeight-12;tip.style.left=x+'px';tip.style.top=y+'px'})};e.onpointerleave=()=>tip.style.display='none';e.onclick=ev=>{ev.stopPropagation();detail.innerHTML=clicked(e)}}
+function apply(){view.setAttribute('transform',`translate(${S.x} ${S.y}) scale(${S.z})`)}
+function zoom(f,px=W/2,py=H/2){const nz=Math.max(1,Math.min(10,S.z*f)),q=nz/S.z;S.x=px-(px-S.x)*q;S.y=py-(py-S.y)*q;S.z=nz;apply()}
+function point(ev){const p=svg.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())}
+svg.onwheel=ev=>{ev.preventDefault();const p=point(ev);zoom(ev.deltaY<0?1.18:1/1.18,p.x,p.y)};
+svg.onpointerdown=ev=>{if(ev.target.dataset.k)return;S.drag=true;svg.classList.add('drag');S.lx=ev.clientX;S.ly=ev.clientY;svg.setPointerCapture(ev.pointerId)};
+svg.onpointermove=ev=>{if(!S.drag)return;const c=svg.getScreenCTM();S.x+=(ev.clientX-S.lx)/c.a;S.y+=(ev.clientY-S.ly)/c.d;S.lx=ev.clientX;S.ly=ev.clientY;apply()};
+svg.onpointerup=ev=>{S.drag=false;svg.classList.remove('drag');try{svg.releasePointerCapture(ev.pointerId)}catch{}};
+svg.onclick=ev=>{if(!ev.target.dataset.k)detail.textContent='Hover for a quick explanation. Click a precinct or multifamily property to pin details here.'};
+$('zin').onclick=()=>zoom(1.25);$('zout').onclick=()=>zoom(.8);$('home').onclick=()=>{S.z=1;S.x=S.y=0;apply()};
+$('pToggle').onchange=e=>{S.sp=e.target.checked;pl.style.display=S.sp?'':'none'};
+$('mToggle').onchange=e=>{S.sm=e.target.checked;ml.style.display=S.sm?'':'none'};
+$('pills').onclick=e=>{const b=e.target.closest('[data-n]');if(!b)return;S.n=Number(b.dataset.n);document.querySelectorAll('.pill').forEach(x=>x.classList.toggle('active',x===b));renderM()};
+function init(){if(!DATA||!S.p?.features?.length||!S.m?.features?.length){fail('Embedded map data is missing. Re-run the site build before deploying.');return}S.b=bounds(S.p);if(!S.b){fail('Precinct geometry is invalid in this build.');return}renderP();renderM();$('ps').innerHTML=`<span class="ok">${S.p.features.length.toLocaleString()} bundled</span>`;$('ms').innerHTML=`<span class="ok">${S.m.features.length.toLocaleString()} bundled</span>`;$('bs').textContent=fmtDate(DATA.meta?.retrieved_at);if(DATA.meta?.multifamily_data_as_of) $('ms').title='Source data as of '+DATA.meta.multifamily_data_as_of}
+init();
+})();
+</script>
+</body>
+</html>
