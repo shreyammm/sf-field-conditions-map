@@ -40,6 +40,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
+          python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
           python scripts/flag_low_confidence_hills.py
@@ -49,6 +50,8 @@ jobs:
           python scripts/refine_surface_permit_ui.py
           python scripts/finalize_audit_ui.py
           python scripts/finalize_permit_aggregation_ui.py
+          python scripts/refine_closure_context_ui.py
+          python scripts/audit_closure_context.py
           # General data/layer audit before the date-control UX mutation.
           python scripts/audit_build.py
           # Final product model: no date by default; day-level closure overlap.
