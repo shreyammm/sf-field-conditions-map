@@ -24,6 +24,9 @@ jobs:
           cat tools/hillchunk00.txt tools/hillchunk01.txt tools/hillchunk02.txt tools/hillchunk03.txt | base64 -d | gzip -dc > /tmp/hills.patch
           git apply --check /tmp/hills.patch
           git apply /tmp/hills.patch
+          # The Actions token cannot write workflow files. Restore the production
+          # Pages workflow here; ChatGPT's GitHub connector updates it separately.
+          git restore .github/workflows/pages.yml
           python -m py_compile scripts/build_site.py
           python - <<'PY'
           from pathlib import Path
@@ -33,13 +36,11 @@ jobs:
           Path('/tmp/map.js').write_text(text[start:end])
           PY
           node --check /tmp/map.js
-      - name: Remove development scaffolding
+      - name: Remove non-workflow development scaffolding
         run: |
           rm -f tools/hills.patch.gz.b64
           rm -f tools/hillchunk00.txt tools/hillchunk01.txt tools/hillchunk02.txt tools/hillchunk03.txt
           rm -f scripts/inspect_hill_source.py
-          rm -f .github/workflows/inspect-hills.yml
-          rm -f .github/workflows/apply-hills.yml
       - name: Commit hill layer
         run: |
           git config user.name "github-actions[bot]"
