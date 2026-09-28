@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final UI pass: forest-green live safety markers + clickable source provenance."""
+"""Final UI pass: high-contrast forest-green live safety markers + clickable source provenance."""
 from pathlib import Path
 
 p = Path(__file__).resolve().parents[1] / "_site" / "index.html"
@@ -13,26 +13,62 @@ def rep(old: str, new: str, label: str, count: int = 1):
     s = s.replace(old, new, count)
 
 
-# Make the live public-safety layer a dark forest green so it does not blend with
-# the purple/blue high-unit parcel palette or the blue closure layer. Keep the
-# Public Works work-permit teal unchanged so the two operational point layers
-# still remain distinguishable.
+# Use a very dark forest green for live public-safety activity. The live-call
+# layer needs to remain legible on top of orange/red hill streets, teal parcel
+# outlines, purple/blue apartment fills, and blue closure lines. Open calls are
+# darkest; closed calls remain filled (rather than nearly white/hollow) so they
+# do not disappear into the parcel/street texture.
 palette = {
-    "#f97316": "#166534",  # open calls / aggregate fill
-    "#c2410c": "#14532d",  # aggregate outline
-    "#fff7ed": "#f0fdf4",  # closed-call fill
-    "#ea580c": "#166534",  # closed outline / checkbox accent / legend outline
-    "#fdba74": "#86efac",  # mixed open/closed cluster
-    "#7c2d12": "#052e16",  # hover outline
+    "#f97316": "#064e3b",  # open calls / aggregate fill
+    "#c2410c": "#022c22",  # aggregate outline
+    "#fff7ed": "#34d399",  # closed-call fill
+    "#ea580c": "#065f46",  # closed outline / checkbox accent / legend outline
+    "#fdba74": "#10b981",  # mixed open/closed cluster
+    "#7c2d12": "#022c22",  # hover outline
 }
 for old, new in palette.items():
     if old not in s:
         raise SystemExit(f"expected live-call palette color missing: {old}")
     s = s.replace(old, new)
 
+# Strengthen contrast beyond hue alone. Low-zoom aggregates get substantially
+# more fill opacity and a dark border. Point markers get thicker outlines and a
+# subtle halo so they remain visually separable from parcel polygons and street
+# lines underneath.
+rep(
+    ".lcg{fill:#064e3b;fill-opacity:.20;stroke:#022c22;stroke-opacity:.72;stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer;pointer-events:all}",
+    ".lcg{fill:#064e3b;fill-opacity:.46;stroke:#022c22;stroke-opacity:.96;stroke-width:1.8;vector-effect:non-scaling-stroke;cursor:pointer;pointer-events:all;filter:drop-shadow(0 0 1.2px rgba(255,255,255,.95))}",
+    "aggregate safety contrast",
+)
+rep(
+    ".lcg:hover{fill-opacity:.33;stroke-opacity:1;stroke-width:2.2}",
+    ".lcg:hover{fill-opacity:.64;stroke-opacity:1;stroke-width:2.5}",
+    "aggregate safety hover",
+)
+rep(
+    ".lcp{fill:#064e3b;fill-opacity:.90;stroke:#fff;stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer;pointer-events:all}",
+    ".lcp{fill:#064e3b;fill-opacity:.98;stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke;cursor:pointer;pointer-events:all;filter:drop-shadow(0 0 1.2px rgba(2,44,34,.42))}",
+    "open-call safety contrast",
+)
+rep(
+    ".lcp.closed{fill:#34d399;fill-opacity:.96;stroke:#065f46;stroke-width:1.8}",
+    ".lcp.closed{fill:#34d399;fill-opacity:.78;stroke:#064e3b;stroke-width:2.2}",
+    "closed-call safety contrast",
+)
+rep(
+    ".lcp.mixed{fill:#10b981;fill-opacity:.94;stroke:#fff;stroke-width:1.5}",
+    ".lcp.mixed{fill:#10b981;fill-opacity:.92;stroke:#fff;stroke-width:2}",
+    "mixed-call safety contrast",
+)
+rep(
+    ".lcp:hover{stroke:#022c22;stroke-width:2.2}",
+    ".lcp:hover{stroke:#022c22;stroke-width:2.7;fill-opacity:1}",
+    "point safety hover",
+)
+
 s = s.replace(
     "Solid orange markers are still-open calls; hollow orange markers are closed calls;",
-    "Solid forest-green markers are still-open calls; hollow forest-green markers are closed calls;",
+    "Dark forest-green markers are still-open calls; lighter filled green markers with a dark outline are closed calls;",
     1,
 )
 
@@ -91,4 +127,4 @@ for dataset_id in [
     rep(old, new, f"inline source link {dataset_id}")
 
 p.write_text(s, encoding="utf-8")
-print("finalized forest-green safety styling and official source links")
+print("finalized high-contrast forest-green safety styling and official source links")
