@@ -43,3 +43,23 @@ For the route-planning apartment layer, display only records where:
 The interface explicitly says that a colored shape is one property parcel with the reported number of residential units. It is not precinct/neighborhood density and the parcel boundary is not necessarily the building footprint.
 
 Hover and click text should explain both the source fact (residential-unit count on one parcel) and the canvassing interpretation (possible concentration of doors / shared-entry friction) without overstating accessibility.
+
+## D007 — Production refreshes use official SF sources only
+**Date:** 2026-09-27
+**Status:** approved during sanity audit
+
+The production build no longer silently falls back to a third-party precinct snapshot. If the official SF Elections / DataSF download fails, the workflow should fail and GitHub Pages should keep serving the last successful deployment.
+
+**Reason:** preserving an older verified official build is preferable to silently changing provenance during an upstream outage.
+
+## D008 — Exact duplicate parcel records are resolved and logged
+**Date:** 2026-09-27
+**Status:** approved during sanity audit
+
+The sanity audit found one exact duplicate parcel ID and geometry in the current SF Planning snapshot with two reported residential-unit counts (170 and 174). The build now deduplicates only when the parcel ID and geometry are identical. If the counts conflict, the larger count is retained and the conflict is written to the build manifest. If the same parcel ID ever arrives with different geometry, the build fails for manual review.
+
+## D009 — Methodology belongs inside the product
+**Date:** 2026-09-27
+**Status:** approved
+
+The map includes an in-product methodology key. Each legend category explains what it means, precinct provenance is stated, “parcel” is defined, unit-count thresholds are documented, excluded geographies are explained, and the current threshold counts / land-use snapshot date are shown from the bundled data.
