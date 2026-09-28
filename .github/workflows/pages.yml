@@ -5,7 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Closures, street-surface permits, and SFPD incidents are daily feeds.
+    # Daily rebuild refreshes fallback snapshots. The public-safety layer also
+    # refreshes its official real-time DataSF feed in-browser every 10 minutes.
     - cron: "17 14 * * *"
 
 permissions:
@@ -34,13 +35,14 @@ jobs:
       - name: Install spatial dependency
         run: python -m pip install --disable-pip-version-check shapely==2.1.2
 
-      - name: Build and audit self-contained site
+      - name: Build and audit site
         run: |
           python scripts/build_site.py
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
-          python scripts/add_incident_aggregates.py
+          # Small fallback snapshot for the official real-time dispatch feed.
+          python scripts/add_live_calls.py
           python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
@@ -53,14 +55,14 @@ jobs:
           python scripts/finalize_permit_aggregation_ui.py
           python scripts/refine_closure_context_ui.py
           python scripts/audit_closure_context.py
-          # General data/layer audit before the date-control UX mutation.
+          # General data/layer audit before final UX mutations.
           python scripts/audit_build.py
-          # Final product model: no date by default; day-level closure overlap.
+          # No date by default; day-level closure overlap.
           python scripts/optional_planning_date_ui.py
-          # SFPD reports are an independent opt-in lookback/category layer.
-          python scripts/patch_incident_aggregate_ui.py
+          # Short-window public-safety activity: 1–48h, live API + fallback.
+          python scripts/patch_live_calls_ui.py
           python scripts/audit_planning_date.py
-          python scripts/audit_incident_aggregates.py
+          python scripts/audit_live_calls.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
