@@ -117,7 +117,7 @@ All 4,283 embedded features had line geometry, valid time windows, and unique ob
 - **Excluded source types:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, and blank/unclassified permit types. Those may be legitimate street uses but are not a clean construction/physical-ROW-occupancy signal for this route layer.
 - **Status rule:** embedded records must be `ACTIVE` or `APPROVED` and have valid SF point geometry plus a valid permit start/end window.
 - **Date interpretation:** a point is eligible for display when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
-- **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production records the snapshot's supported date range and suppresses the layer outside it.
+- **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production anchors the supported range to the actual San Francisco retrieval date and suppresses the layer outside the current/upcoming window. Row-level `data_as_of` varies by record and is not used as the snapshot date.
 - **Interpretation:** potential street/sidewalk work or occupancy context only. A permit is not proof of a closure, obstruction, exact work footprint, or pedestrian inaccessibility.
 - **Presentation:** opt-in/off by default because thousands of permit points may overlap one date and would otherwise obscure the route map.
 - **Freshness:** refreshed daily with the rest of the dynamic public-data layers.
@@ -137,11 +137,11 @@ Embedded type counts were:
 - Minor encroachment (`MinorEnc`): 1
 - Street space (`StreetSpace`): 1
 
-The build omitted 469 source rows whose permit type was outside the construction/ROW filter, 141 exact duplicate rows, and 2 rows with invalid/missing permit date windows. The audited work records had a latest retained `data_as_of` value of `2026-09-25T03:27:20.780`; the product therefore treats `2026-09-25` through `2026-10-09` as the supported current/upcoming display window for that snapshot. On 2026-09-27, 3,921 embedded permit windows overlapped the date, which is why this dense layer is off by default.
+The build omitted 469 source rows whose permit type was outside the construction/ROW filter, 141 exact duplicate rows, and 2 rows with invalid/missing permit date windows. The latest retained row-level `data_as_of` value was `2026-09-25T03:27:20.780`, but that field varies by record and is **not** used as the snapshot date. The audited build retrieved the source at `2026-09-27T23:12:23-07:00`, so the product treats **2026-09-27 through 2026-10-11** as that snapshot's supported current/upcoming window. On 2026-09-27, 3,921 embedded permit windows overlapped the date, which is why this dense layer is off by default.
 
 ## Build-time provenance
 
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, duplicate/exclusion counts, `data_as_of` and supported date range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
+Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, duplicate/exclusion counts, SF retrieval time and supported date range; housing threshold counts and excluded geography counts; duplicate parcel anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
 
 The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
 
