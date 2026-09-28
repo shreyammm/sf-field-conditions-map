@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
-"""Embed privacy-preserving SFPD reported-incident aggregates.
+"""Embed recent SFPD reported-incident aggregates for map context.
 
-Why aggregate at build time:
-The official SFPD table is one row per Incident ID + Incident Code, so one
-report can occupy multiple rows. A rolling year contains hundreds of thousands
-of source rows and is too large for a self-contained browser map. DataSF/SoQL
-therefore counts DISTINCT Incident IDs at SFPD's public privacy-mapped point for
-four fixed lookback windows (30/90/180/365 days). We store both an ALL-category
-view and category-specific views. This preserves report deduplication within a
-point/category grouping while keeping the production artifact tractable.
+The source table can contain multiple rows for one Incident ID because a report
+may contain multiple incident codes. Production therefore counts DISTINCT
+Incident IDs rather than source rows. Counts are grouped at SFPD's public
+privacy-mapped point for four fixed lookback windows, with both ALL-category and
+category-specific views.
 
-DataSF v3 pagination has proven inconsistent for large grouped queries in
-GitHub Actions. Production therefore obtains complete grouped results by
-recursively partitioning each requested time window until every grouped query
-returns below the API row cap, then sums the disjoint time-slice counts back to
-the requested 30/90/180/365-day window.
-
-The layer is descriptive reported-incident context only. It does not compute a
+This layer is descriptive reported-incident context only. It does not compute a
 precinct/neighborhood safety score, prediction, or voter-targeting variable.
 """
 from __future__ import annotations
@@ -27,6 +18,7 @@ import json
 import pathlib
 import re
 import time
+import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
@@ -35,56 +27,41 @@ SITE = ROOT / "_site" / "index.html"
 MANIFEST = ROOT / "_site" / "data-manifest.json"
 
 DATASET_ID = "wg3w-h783"
-QUERY_URL = f"https://data.sfgov.org/api/v3/views/{DATASET_ID}/query.json"
+# data.sf.gov is the current working Socrata resource host. The older
+# data.sfgov.org resource hostname returns 403 from GitHub Actions.
+RESOURCE_URL = f"https://data.sf.gov/resource/{DATASET_ID}.json"
 SOURCE_PAGE = (
     "https://data.sf.gov/Public-Safety/"
     "Police-Department-Incident-Reports-2018-to-Present/wg3w-h783/data"
 )
 LOOKBACKS = (30, 90, 180, 365)
-PAGE_SIZE = 5_000
+PAGE_SIZE = 50_000
+MAX_GROUP_ROWS = 200_000
 HEADERS = {
     "User-Agent": (
         "sf-field-conditions-map/1.0 "
         "(+https://github.com/shreyammm/sf-field-conditions-map)"
     ),
     "Accept": "application/json",
-    "Content-Type": "application/json",
 }
 
 
-def post_query(query: str, attempts: int = 3, timeout: int = 180):
-    body = json.dumps(
-        {
-            "query": query,
-            "page": {"pageNumber": 1, "pageSize": PAGE_SIZE},
-            "includeSynthetic": False,
-        },
-        separators=(",", ":"),
-    ).encode("utf-8")
+def get_rows(params: dict[str, str], attempts: int = 3, timeout: int = 120):
+    url = RESOURCE_URL + "?" + urllib.parse.urlencode(params)
     last = None
     for attempt in range(1, attempts + 1):
         try:
-            request = urllib.request.Request(
-                QUERY_URL, data=body, headers=HEADERS, method="POST"
-            )
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=timeout) as response:
                 payload = json.load(response)
-            if isinstance(payload, list):
-                return payload
-            if isinstance(payload, dict):
-                for key in ("data", "results", "rows"):
-                    if isinstance(payload.get(key), list):
-                        return payload[key]
-            raise ValueError(
-                "DataSF v3 response did not contain a recognizable row array"
-            )
+            if not isinstance(payload, list):
+                raise ValueError("DataSF resource response was not a row array")
+            return payload
         except Exception as exc:
             last = exc
             if attempt < attempts:
                 time.sleep(2 * attempt)
-    raise RuntimeError(
-        f"Failed after {attempts} attempts: {QUERY_URL}\n{last}"
-    ) from last
+    raise RuntimeError(f"Failed after {attempts} attempts: {url}\n{last}") from last
 
 
 def parse_payload(html: str):
@@ -104,7 +81,6 @@ def intish(value, default=-1):
 
 
 def aggregate_count(row):
-    """Read count(distinct ...) robustly if SODA3 rewrites an alias."""
     for key in (
         "report_count",
         "count_distinct_incident_id",
@@ -113,14 +89,14 @@ def aggregate_count(row):
         "count_1",
     ):
         if key in row:
-            n = intish(row.get(key))
-            if n >= 0:
-                return n
+            value = intish(row.get(key))
+            if value >= 0:
+                return value
     for key, value in row.items():
         if "count" in str(key).lower():
-            n = intish(value)
-            if n >= 0:
-                return n
+            parsed = intish(value)
+            if parsed >= 0:
+                return parsed
     return -1
 
 
@@ -137,115 +113,107 @@ def valid_point(row):
 
 def window_bounds(end_date: dt.date, days: int):
     start = end_date - dt.timedelta(days=days - 1)
-    start_dt = dt.datetime.combine(start, dt.time.min)
-    stop_dt = dt.datetime.combine(end_date + dt.timedelta(days=1), dt.time.min)
-    return start, start_dt, stop_dt
-
-
-def ts(value: dt.datetime):
-    return value.strftime("%Y-%m-%dT%H:%M:%S.000")
+    start_ts = start.isoformat() + "T00:00:00.000"
+    next_ts = (end_date + dt.timedelta(days=1)).isoformat() + "T00:00:00.000"
+    return start, start_ts, next_ts
 
 
 def where_clause(start_ts: str, next_ts: str):
     return (
-        f"`incident_datetime` >= '{start_ts}' "
-        f"AND `incident_datetime` < '{next_ts}' "
-        "AND `latitude` IS NOT NULL AND `longitude` IS NOT NULL"
+        f"incident_datetime >= '{start_ts}' "
+        f"AND incident_datetime < '{next_ts}' "
+        "AND latitude IS NOT NULL AND longitude IS NOT NULL"
     )
 
 
-def all_query(start_ts: str, next_ts: str):
-    return (
-        "SELECT `intersection`, `police_district`, `analysis_neighborhood`, "
-        "`latitude`, `longitude`, "
-        "count(distinct `incident_id`) AS report_count "
-        f"WHERE {where_clause(start_ts, next_ts)} "
-        "GROUP BY `intersection`, `police_district`, `analysis_neighborhood`, "
-        "`latitude`, `longitude` "
-        "ORDER BY `latitude` ASC, `longitude` ASC, `intersection` ASC"
-    )
-
-
-def category_query(start_ts: str, next_ts: str):
-    return (
-        "SELECT `incident_category`, `intersection`, `police_district`, "
-        "`analysis_neighborhood`, `latitude`, `longitude`, "
-        "count(distinct `incident_id`) AS report_count "
-        f"WHERE {where_clause(start_ts, next_ts)} "
-        "GROUP BY `incident_category`, `intersection`, `police_district`, "
-        "`analysis_neighborhood`, `latitude`, `longitude` "
-        "ORDER BY `incident_category` ASC, `latitude` ASC, `longitude` ASC, "
-        "`intersection` ASC"
-    )
-
-
-def grouped_key(row, include_category: bool):
-    fields = []
-    if include_category:
-        fields.append(str(row.get("incident_category") or "Uncategorized").strip() or "Uncategorized")
-    fields.extend(
-        [
-            str(row.get("intersection") or "").strip(),
-            str(row.get("police_district") or "").strip(),
-            str(row.get("analysis_neighborhood") or "").strip(),
-            str(row.get("latitude") or "").strip(),
-            str(row.get("longitude") or "").strip(),
-        ]
-    )
-    return tuple(fields)
-
-
-def fetch_grouped_interval(query_fn, start_dt, stop_dt):
-    """Fetch one half-open interval; split recursively if the API hits its cap."""
-    query = query_fn(ts(start_dt), ts(stop_dt)) + f" LIMIT {PAGE_SIZE}"
-    rows = post_query(query)
-    if len(rows) < PAGE_SIZE:
-        return rows, 1
-
-    span = stop_dt - start_dt
-    if span <= dt.timedelta(hours=1):
-        raise ValueError(
-            "Incident aggregate still reaches the DataSF row cap in an interval "
-            f"of one hour or less: {ts(start_dt)} to {ts(stop_dt)}"
+def fetch_grouped(select: str, where: str, group: str, order: str):
+    rows = []
+    offset = 0
+    previous_signature = None
+    while True:
+        page = get_rows(
+            {
+                "$select": select,
+                "$where": where,
+                "$group": group,
+                "$order": order,
+                "$limit": str(PAGE_SIZE),
+                "$offset": str(offset),
+            }
         )
-    midpoint = start_dt + span / 2
-    left_rows, left_queries = fetch_grouped_interval(query_fn, start_dt, midpoint)
-    right_rows, right_queries = fetch_grouped_interval(query_fn, midpoint, stop_dt)
-    return left_rows + right_rows, left_queries + right_queries + 1
+        if page:
+            first = page[0]
+            last = page[-1]
+            signature = (
+                str(first.get("incident_category") or ""),
+                str(first.get("latitude") or ""),
+                str(first.get("longitude") or ""),
+                str(last.get("incident_category") or ""),
+                str(last.get("latitude") or ""),
+                str(last.get("longitude") or ""),
+                len(page),
+            )
+            if signature == previous_signature:
+                raise ValueError(
+                    f"DataSF grouped pagination repeated at offset {offset}"
+                )
+            previous_signature = signature
+        rows.extend(page)
+        if len(page) < PAGE_SIZE:
+            break
+        offset += len(page)
+        if len(rows) > MAX_GROUP_ROWS:
+            raise ValueError(
+                f"Incident grouped query exceeded {MAX_GROUP_ROWS} rows"
+            )
+    return rows
 
 
-def fetch_grouped_complete(query_fn, start_dt, stop_dt, include_category=False):
-    """Return requested-window groups after merging disjoint time partitions."""
-    raw_rows, query_count = fetch_grouped_interval(query_fn, start_dt, stop_dt)
-    merged = {}
-    for row in raw_rows:
-        n = aggregate_count(row)
-        if n < 0:
-            raise ValueError(f"Could not parse aggregate count: {row}")
-        key = grouped_key(row, include_category)
-        if key not in merged:
-            merged[key] = dict(row)
-            merged[key]["report_count"] = n
-        else:
-            merged[key]["report_count"] = intish(merged[key].get("report_count"), 0) + n
-    return list(merged.values()), len(raw_rows), query_count
+def fetch_all_groups(start_ts: str, next_ts: str):
+    where = where_clause(start_ts, next_ts)
+    return fetch_grouped(
+        (
+            "intersection,police_district,analysis_neighborhood,latitude,longitude,"
+            "count(distinct incident_id) as report_count"
+        ),
+        where,
+        "intersection,police_district,analysis_neighborhood,latitude,longitude",
+        "latitude ASC,longitude ASC,intersection ASC",
+    )
 
 
-def exact_city_count(start_dt: dt.datetime, stop_dt: dt.datetime):
-    rows = post_query(
-        "SELECT count(distinct `incident_id`) AS report_count "
-        f"WHERE {where_clause(ts(start_dt), ts(stop_dt))} LIMIT 1"
+def fetch_category_groups(start_ts: str, next_ts: str):
+    where = where_clause(start_ts, next_ts)
+    return fetch_grouped(
+        (
+            "incident_category,intersection,police_district,analysis_neighborhood,"
+            "latitude,longitude,count(distinct incident_id) as report_count"
+        ),
+        where,
+        (
+            "incident_category,intersection,police_district,analysis_neighborhood,"
+            "latitude,longitude"
+        ),
+        "incident_category ASC,latitude ASC,longitude ASC,intersection ASC",
+    )
+
+
+def exact_city_count(start_ts: str, next_ts: str):
+    rows = get_rows(
+        {
+            "$select": "count(distinct incident_id) as report_count",
+            "$where": where_clause(start_ts, next_ts),
+            "$limit": "1",
+        }
     )
     if len(rows) != 1:
         raise ValueError(
             f"Expected one citywide incident count row, received {len(rows)}"
         )
-    n = aggregate_count(rows[0])
-    if n < 1:
-        raise ValueError(
-            f"Could not parse citywide distinct Incident-ID count: {rows[0]}"
-        )
-    return n
+    count = aggregate_count(rows[0])
+    if count < 1:
+        raise ValueError(f"Could not parse citywide report count: {rows[0]}")
+    return count
 
 
 def row_to_feature(row, days: int, category: str):
@@ -258,11 +226,7 @@ def row_to_feature(row, days: int, category: str):
         "category": category,
         "report_count": count,
     }
-    for field in (
-        "intersection",
-        "police_district",
-        "analysis_neighborhood",
-    ):
+    for field in ("intersection", "police_district", "analysis_neighborhood"):
         value = str(row.get(field) or "").strip()
         if value:
             props[field] = value
@@ -285,14 +249,10 @@ def main():
     invalid_rows = collections.Counter()
 
     for days in LOOKBACKS:
-        start, start_dt, stop_dt = window_bounds(end_date, days)
-        all_rows, all_raw_group_rows, all_query_count = fetch_grouped_complete(
-            all_query, start_dt, stop_dt, include_category=False
-        )
-        category_rows, category_raw_group_rows, category_query_count = fetch_grouped_complete(
-            category_query, start_dt, stop_dt, include_category=True
-        )
-        exact_count = exact_city_count(start_dt, stop_dt)
+        start, start_ts, next_ts = window_bounds(end_date, days)
+        all_rows = fetch_all_groups(start_ts, next_ts)
+        category_rows = fetch_category_groups(start_ts, next_ts)
+        exact_count = exact_city_count(start_ts, next_ts)
 
         all_kept = 0
         category_kept = 0
@@ -332,9 +292,6 @@ def main():
                 f"{days}-day point memberships below exact city report count: "
                 f"{all_point_memberships} < {exact_count}"
             )
-        # Point memberships can slightly exceed the exact city total if a report
-        # appears at more than one privacy-mapped point across source rows. A
-        # large difference signals a source/query problem and blocks deployment.
         if all_point_memberships > exact_count * 1.05:
             raise ValueError(
                 f"{days}-day point memberships exceed exact count by >5%: "
@@ -349,17 +306,13 @@ def main():
             "all_point_report_memberships": all_point_memberships,
             "category_point_group_count": category_kept,
             "category_report_memberships": dict(category_memberships),
-            "all_partition_raw_group_rows": all_raw_group_rows,
-            "category_partition_raw_group_rows": category_raw_group_rows,
-            "all_partition_query_count": all_query_count,
-            "category_partition_query_count": category_query_count,
+            "all_source_group_rows": len(all_rows),
+            "category_source_group_rows": len(category_rows),
         }
         print(
             f"incidents {days}d: exact_reports={exact_count}; "
-            f"all_groups={all_kept} from {all_raw_group_rows} partition rows / "
-            f"{all_query_count} queries; point_memberships={all_point_memberships}; "
-            f"category_groups={category_kept} from {category_raw_group_rows} "
-            f"partition rows / {category_query_count} queries"
+            f"all_groups={all_kept}; point_memberships={all_point_memberships}; "
+            f"category_groups={category_kept}"
         )
 
     if not 1_000 <= len(features) <= 250_000:
@@ -376,7 +329,7 @@ def main():
         {
             "incident_dataset_id": DATASET_ID,
             "incident_source_page": SOURCE_PAGE,
-            "incident_resource_url": QUERY_URL,
+            "incident_resource_url": RESOURCE_URL,
             "incident_retrieved_sf": retrieved_sf.replace(
                 microsecond=0
             ).isoformat(),
@@ -388,9 +341,7 @@ def main():
             "incident_counting_rule": (
                 "DataSF count(distinct incident_id) grouped at SFPD public "
                 "privacy-mapped point, separately for ALL categories and each "
-                "SFPD incident_category, for fixed 30/90/180/365-day windows; "
-                "large grouped queries are partitioned into disjoint incident-time "
-                "intervals and re-summed by the same point/category key"
+                "SFPD incident_category, for fixed 30/90/180/365-day windows"
             ),
             "incident_location_note": (
                 "SFPD maps all public incident locations to nearby intersections "
@@ -417,7 +368,7 @@ def main():
     manifest["incidents"] = {
         "dataset_id": DATASET_ID,
         "source_page": SOURCE_PAGE,
-        "resource_url": QUERY_URL,
+        "resource_url": RESOURCE_URL,
         "retrieved_sf": retrieved_sf.replace(microsecond=0).isoformat(),
         "windows": window_meta,
         "lookback_options": list(LOOKBACKS),
@@ -426,8 +377,7 @@ def main():
         "invalid_aggregate_rows": dict(invalid_rows),
         "counting_rule": (
             "count distinct Incident IDs at source privacy-mapped points; ALL "
-            "and category-specific aggregates stored separately; API-cap-sized "
-            "grouped queries are recursively time-partitioned and re-summed"
+            "and category-specific aggregates stored separately"
         ),
         "location_privacy": (
             "SFPD maps public incident locations to nearby intersections; "
