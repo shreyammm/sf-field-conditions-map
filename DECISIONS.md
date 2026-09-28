@@ -42,32 +42,42 @@ For the route-planning apartment layer, display only records where:
 
 The interface explicitly says that a colored shape is one property parcel with the reported number of residential units. It is not precinct/neighborhood density and the parcel boundary is not necessarily the building footprint.
 
-Hover and click text should explain both the source fact (residential-unit count on one parcel) and the canvassing interpretation (possible concentration of doors / shared-entry friction) without overstating accessibility.
+Hover and click text should explain both the source fact and the possible shared-entry interpretation without overstating accessibility.
 
 ## D007 — Production refreshes use official SF sources only
 **Date:** 2026-09-27
 **Status:** approved during sanity audit
 
-The production build no longer silently falls back to a third-party precinct snapshot. If the official SF Elections / DataSF download fails, the workflow should fail and GitHub Pages should keep serving the last successful deployment.
-
-**Reason:** preserving an older verified official build is preferable to silently changing provenance during an upstream outage.
+Production refreshes do not silently switch to third-party source snapshots. If an official SF/DataSF production source fails, the workflow fails and GitHub Pages keeps serving the prior successful deployment.
 
 ## D008 — Exact duplicate parcel records are resolved and logged
 **Date:** 2026-09-27
-**Status:** approved during sanity audit
+**Status:** revised by D011
 
-The sanity audit found one exact duplicate parcel ID and geometry in the current SF Planning snapshot with two reported residential-unit counts (170 and 174). The build now deduplicates only when the parcel ID and geometry are identical. If the counts conflict, the larger count is retained and the conflict is written to the build manifest. If the same parcel ID ever arrives with different geometry, the build fails for manual review.
+Exact duplicate parcel IDs are only auto-resolved when geometry is also identical. The first implementation kept the larger unit count when duplicate unit values conflicted. D011 tightens this to surface the observed range and fail if a conflict crosses a displayed threshold.
 
 ## D009 — Methodology belongs inside the product
 **Date:** 2026-09-27
 **Status:** approved
 
-The map includes an in-product methodology key. Each legend category explains what it means, precinct provenance is stated, “parcel” is defined, unit-count thresholds are documented, excluded geographies are explained, and the current threshold counts / land-use snapshot date are shown from the bundled data.
+The map includes an in-product methodology key. Each legend category explains what it means, provenance is stated, “parcel” is defined, unit-count thresholds are documented, exclusions are explained, and current source/build counts are surfaced.
 
-## D010 — Active SF street centerlines are the route backbone
+## D010 — SF Public Works centerlines are the street backbone
 **Date:** 2026-09-27
-**Status:** approved
+**Status:** revised by D011
 
-Use SF Public Works / DataSF `Streets – Active and Retired` (`3psu-pn9h`) as both the visual street network and the canonical segment geography for later street-based layers. The deployed map retains only `active = true` records and preserves each segment's Centerline Network Number (CNN), street name, cross streets, class code, jurisdiction, and geometry.
+Use SF Public Works / DataSF `Streets – Active and Retired` (`3psu-pn9h`) as the source for the visual street network and canonical street-segment geography for later street-based layers. Preserve CNN, name/endpoints, class code, source layer, jurisdiction, and geometry. Street class codes are for visual hierarchy only, not a canvassing score.
 
-Street class codes are used only to create a readable visual hierarchy. They are not a canvassing score. Future hill grade, temporary closure, and construction information should attach to these same CNN segments where the public source permits a reliable join.
+Future hill grade, temporary closure, and construction information should attach to the same displayed street segments where the public source permits a reliable CNN or validated spatial join.
+
+## D011 — Sanity-audited street backbone and source ambiguity handling
+**Date:** 2026-09-28
+**Status:** approved after source audit
+
+“Active” in the Public Works street source means “not retired”; it does not mean that every active source feature is a real/publicly traversable street. The production street backbone therefore starts with `active = true` and excludes source layers `PAPER`, `PAPER_FWYS`, `PAPER_WATER`, `PSEUDO`, and `PRIVATE_PARKING`. Private streets, pedestrian-only streets, park/NPS roads, unpaved rights-of-way, freeways, and ramps can remain as contextual centerlines but must not be described as necessarily publicly accessible.
+
+CNN is described as the source/City segment identifier, not as permanently immutable. Endpoint fields are described as “between” streets rather than a travel direction.
+
+Street labels are cached and may repeat spatially as zoom increases so long streets remain identifiable at neighborhood scale. Major street classes are rendered above lower-priority local context.
+
+For exact duplicate parcel rows with identical geometry, conflicting unit values may be auto-resolved only if all observed values fall in the same displayed threshold bucket; the UI shows the observed range. A conflict that crosses a 20/50/100/200 threshold, or a repeated parcel ID with different geometry, fails the build for manual review.

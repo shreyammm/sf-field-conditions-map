@@ -2,20 +2,23 @@
 
 A traceable, static San Francisco field-conditions map built from reliable public data.
 
-The browser does **not** call DataSF at runtime. GitHub Actions retrieves the public source datasets during the build, validates them, and embeds the resulting GeoJSON directly into the deployed HTML. That means a normal page load is not dependent on DataSF/CORS availability.
+The browser does **not** call DataSF at runtime. GitHub Actions retrieves official source datasets during the build, validates and filters them, and embeds the resulting GeoJSON directly into the deployed HTML. A normal page load therefore does not depend on DataSF/CORS availability.
 
 ## Current checkpoint
 
 The map currently includes:
 
+- active, physical/context SF Public Works street centerlines with street names and CNN segment identifiers;
 - San Francisco election precinct boundaries as a neutral reference layer;
-- large multifamily properties from SF Planning, using public residential-unit counts;
-- 20+/50+/100+/200+ unit thresholds;
+- parcel-level high-unit residential properties from SF Planning;
+- 20+/50+/100+/200+ residential-unit thresholds;
 - hover and click explanations;
-- source counts and build timestamp;
+- an in-product methodology key, source counts, exclusions, and build timestamp;
 - dependency-free SVG pan/zoom rendering.
 
-Large multifamily is shown only as a proxy for possible access friction. A large building is **not** treated as confirmed inaccessible.
+The street layer intentionally excludes Public Works source layers that are mapped-but-not-real or non-street geometry (`PAPER`, `PAPER_FWYS`, `PAPER_WATER`, `PSEUDO`, and `PRIVATE_PARKING`). “Active” in the source means “not retired”; it does **not** by itself mean publicly accessible or walkable. Private streets, pedestrian-only streets, park roads, and unpaved rights-of-way can remain as labeled context.
+
+The residential layer is a proxy for places where many doors may be concentrated on one parcel. It does **not** establish whether a building or lobby is accessible.
 
 ## Architecture
 
@@ -24,14 +27,14 @@ Official SF/DataSF datasets
           ↓
 GitHub Actions build
           ↓
-validation + field trimming
+validation + documented filtering
           ↓
 GeoJSON embedded into _site/index.html
           ↓
-GitHub Pages / other static host
+GitHub Pages
 ```
 
-The deployed app contains no runtime `fetch()` calls for the core layers.
+A failed source refresh does not replace the previously successful deployment.
 
 ## Build locally
 
@@ -44,11 +47,11 @@ Then open `http://localhost:8000`.
 
 ## Deployment
 
-A Pages workflow is included at `.github/workflows/pages.yml`. In GitHub, open **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**. If GitHub does not allow Pages for this private repository on your plan, either make the repository public or deploy the generated `_site` directory on another static host.
+The live site is deployed with `.github/workflows/pages.yml` from `main`. GitHub Pages is configured to use **GitHub Actions**. The workflow also performs a weekly refresh of the bundled public-data snapshots.
 
-## Sources
+## Sources and audit trail
 
-See [`SOURCES.md`](SOURCES.md) for dataset IDs, fields, and transformations. The build also writes `_site/data-manifest.json` with retrieval time, source URLs, record counts, and any source-update timestamps returned by the upstream metadata APIs.
+See [`SOURCES.md`](SOURCES.md) for dataset IDs, source semantics, filters, and caveats; [`DECISIONS.md`](DECISIONS.md) for consequential methodology choices; and `validation/` for review checkpoints. Each successful build also writes `_site/data-manifest.json` with retrieval time, source URLs, displayed/source counts, exclusions, threshold counts, and detected duplicate-source anomalies.
 
 ## Scope guardrails
 
