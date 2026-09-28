@@ -46,6 +46,7 @@ jobs:
           python scripts/patch_closure_ui.py
           python scripts/prepare_surface_banner.py
           python scripts/patch_surface_permit_ui.py
+          python scripts/refine_surface_permit_ui.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
