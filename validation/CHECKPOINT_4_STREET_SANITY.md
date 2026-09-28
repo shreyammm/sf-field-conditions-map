@@ -56,3 +56,5 @@ README/project/deployment documentation still described the pre-street build and
 ## Remaining limitation before hills
 
 The current SVG approach is appropriate for the prototype but embeds ~16k street segments plus parcel/precinct geometry in one static page. Performance should be watched on mobile as more street-based layers are added. Before adding several additional line overlays, consider moving base-street rendering to Canvas/WebGL while retaining inspectable feature metadata.
+
+Audit corrections are applied to the production build before moving on to hill-grade work.
