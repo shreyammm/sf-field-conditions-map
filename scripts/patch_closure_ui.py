@@ -87,7 +87,7 @@ const closureTimeText=p=>`${fmtSFLocal(p.start_local||p.start_dt)} to ${fmtSFLoc
 function add(parent,d,cls,f,k){'''
 repl("function add(parent,d,cls,f,k){", helpers, "closure helpers")
 
-render_c = '''function renderC(){cl.replaceChildren();let n=0;(S.c?.features||[]).forEach(f=>{if(!closureActive(f,S.ct))return;const d=linePath(f.geometry);if(d){add(cl,d,'cl',f,'c');n++}});cl.style.display=S.sc?'':'none';const snap=DATA.meta?.closure_data_as_of?String(DATA.meta.closure_data_as_of).slice(0,10):'unknown';$('cs').innerHTML=`<span class="${n?'ok':'warn'}">${n.toLocaleString()} active</span><span class="muted"> · selected SF time · snapshot ${esc(snap)}</span>`}
+render_c = '''function renderC(){cl.replaceChildren();let n=0;(S.c?.features||[]).forEach(f=>{if(!closureActive(f,S.ct))return;const d=linePath(f.geometry);if(d){add(cl,d,'cl',f,'c');n++}});cl.style.display=S.sc?'':'none';const sourceDate=DATA.meta?.closure_data_as_of?String(DATA.meta.closure_data_as_of).slice(0,10):DATA.meta?.retrieved_at?String(DATA.meta.retrieved_at).slice(0,10):'unknown';const sourceLabel=DATA.meta?.closure_data_as_of?'source date':'retrieved';$('cs').innerHTML=`<span class="${n?'ok':'warn'}">${n.toLocaleString()} active</span><span class="muted"> · selected SF time · ${esc(sourceLabel)} ${esc(sourceDate)}</span>`}
 function renderP(){pl.replaceChildren();'''
 repl("function renderP(){pl.replaceChildren();", render_c, "render closures")
 
