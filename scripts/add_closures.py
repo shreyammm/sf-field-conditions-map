@@ -28,31 +28,10 @@ HEADERS = {
 }
 
 KEEP_FIELDS = {
-    "objectid",
-    "case_num",
-    "case_name",
-    "type",
-    "status",
-    "start_date",
-    "start_time",
-    "start_dt",
-    "end_date",
-    "end_time",
-    "end_dt",
-    "loc_desc",
-    "cnn",
-    "street",
-    "from_st",
-    "to_st",
-    "direction",
-    "veh_imp",
-    "info",
-    "start_utc",
-    "end_utc",
-    "data_as_of",
-    "data_loaded_at",
-    "created_date",
-    "last_edited_date",
+    "objectid", "case_num", "case_name", "type", "status",
+    "start_date", "start_time", "start_dt", "end_date", "end_time", "end_dt",
+    "loc_desc", "cnn", "street", "from_st", "to_st", "direction", "veh_imp", "info",
+    "start_utc", "end_utc", "data_as_of", "data_loaded_at", "created_date", "last_edited_date",
 }
 
 
@@ -127,7 +106,9 @@ def main():
         status = str(p.get("status") or "").strip()
         status_counts[status or "(blank)"] += 1
 
-        if status and status.upper() != "PERMITTED":
+        # Documentation and product wording promise a permitted-only layer, so
+        # blanks are excluded too rather than being treated as implicitly valid.
+        if status.upper() != "PERMITTED":
             omitted["non_permitted_status"] += 1
             continue
 
@@ -143,10 +124,12 @@ def main():
             continue
 
         oid = str(p.get("objectid") or "").strip()
-        if oid:
-            if oid in objectids:
-                raise ValueError(f"Duplicate closure objectid in source: {oid}")
-            objectids.add(oid)
+        if not oid:
+            omitted["missing_objectid"] += 1
+            continue
+        if oid in objectids:
+            raise ValueError(f"Duplicate closure objectid in source: {oid}")
+        objectids.add(oid)
 
         cnn = str(p.get("cnn") or "").strip()
         if cnn:
@@ -165,51 +148,38 @@ def main():
         trimmed_props = {k: p.get(k) for k in KEEP_FIELDS if k in p}
         trimmed_props["start_local"] = start
         trimmed_props["end_local"] = end
-
-        kept.append({
-            "type": "Feature",
-            "geometry": geom,
-            "properties": trimmed_props,
-        })
+        kept.append({"type": "Feature", "geometry": geom, "properties": trimmed_props})
 
     if not kept:
-        raise ValueError("Closure source produced zero valid line features")
+        raise ValueError("Closure source produced zero valid permitted line features")
     if omitted["invalid_time_window"] > max(10, int(0.05 * source_count)):
-        raise ValueError(
-            f"Too many closure rows have invalid/missing time windows: "
-            f"{omitted['invalid_time_window']}/{source_count}"
-        )
+        raise ValueError(f"Too many closure rows have invalid/missing time windows: {omitted['invalid_time_window']}/{source_count}")
     if omitted["missing_or_non_line_geometry"] > max(10, int(0.05 * source_count)):
-        raise ValueError(
-            f"Too many closure rows have missing/non-line geometry: "
-            f"{omitted['missing_or_non_line_geometry']}/{source_count}"
-        )
+        raise ValueError(f"Too many closure rows have missing/non-line geometry: {omitted['missing_or_non_line_geometry']}/{source_count}")
 
     match_rate = (cnn_match / cnn_with) if cnn_with else None
     if cnn_with >= 100 and match_rate is not None and match_rate < 0.80:
         raise ValueError(f"Unexpectedly low closure CNN match rate: {cnn_match}/{cnn_with}")
 
     payload["closures"] = {"type": "FeatureCollection", "features": kept}
-
     meta = payload.setdefault("meta", {})
-    meta["closure_dataset_id"] = DATASET_ID
-    meta["closure_source_url"] = SOURCE_URL
-    meta["closure_source_count"] = source_count
-    meta["closure_display_count"] = len(kept)
-    meta["closure_omitted_counts"] = dict(omitted)
-    meta["closure_status_counts"] = dict(status_counts)
-    meta["closure_type_counts"] = dict(type_counts)
-    meta["closure_cnn_present_count"] = cnn_with
-    meta["closure_cnn_match_count"] = cnn_match
-    meta["closure_cnn_match_rate"] = round(match_rate, 4) if match_rate is not None else None
-    meta["closure_data_as_of"] = max(data_as_of_values) if data_as_of_values else None
-    meta["closure_min_start_local"] = min(starts)
-    meta["closure_max_end_local"] = max(ends)
-    meta["closure_time_basis"] = "America/Los_Angeles local floating start_dt/end_dt"
-    meta["closure_scope_note"] = (
-        "SFMTA-permitted temporary closures only; does not include every closure "
-        "managed by Public Works, SFPD, or other agencies."
-    )
+    meta.update({
+        "closure_dataset_id": DATASET_ID,
+        "closure_source_url": SOURCE_URL,
+        "closure_source_count": source_count,
+        "closure_display_count": len(kept),
+        "closure_omitted_counts": dict(omitted),
+        "closure_status_counts": dict(status_counts),
+        "closure_type_counts": dict(type_counts),
+        "closure_cnn_present_count": cnn_with,
+        "closure_cnn_match_count": cnn_match,
+        "closure_cnn_match_rate": round(match_rate, 4) if match_rate is not None else None,
+        "closure_data_as_of": max(data_as_of_values) if data_as_of_values else None,
+        "closure_min_start_local": min(starts),
+        "closure_max_end_local": max(ends),
+        "closure_time_basis": "America/Los_Angeles local floating start_dt/end_dt",
+        "closure_scope_note": "SFMTA-permitted temporary closures only; does not include every closure managed by Public Works, SFPD, or other agencies.",
+    })
 
     packed = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     SITE.write_text(html[:match.start(1)] + packed + html[match.end(1):], encoding="utf-8")
@@ -230,12 +200,8 @@ def main():
         "min_start_local": min(starts),
         "max_end_local": max(ends),
         "time_basis": "America/Los_Angeles local floating start_dt/end_dt",
-        "filter_rule": "show feature when start_local <= selected SF local datetime <= end_local",
-        "interpretation": (
-            "official SFMTA-permitted temporary street-closure line geometry; "
-            "not proof that pedestrian access is blocked and not a complete inventory "
-            "of closures managed by other City departments"
-        ),
+        "filter_rule": "status = Permitted AND start_local <= selected SF local datetime <= end_local",
+        "interpretation": "official SFMTA-permitted temporary street-closure line geometry; not proof that pedestrian access is blocked and not a complete inventory of closures managed by other City departments",
     }
     MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
