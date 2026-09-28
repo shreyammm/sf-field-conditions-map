@@ -20,3 +20,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python scripts/inspect_hill_source.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contour-snapshot
+          path: contours.geojson
+          retention-days: 1
