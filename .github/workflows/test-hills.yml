@@ -31,8 +31,9 @@ jobs:
           from pathlib import Path
           text = Path('_site/index.html').read_text()
           assert 'fetch(' not in text
-          assert 'Hill / steep street estimate' in text
+          assert 'Hill grade coloring' in text
           assert 'hill_grade_pct' in text
+          assert 'five-foot terrain contours' in text
           print('self-contained hill UI checks passed')
           PY
       - uses: actions/upload-artifact@v4
