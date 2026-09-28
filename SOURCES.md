@@ -82,12 +82,12 @@ In the 2026-09-28 audited build, 15,682 non-freeway/ramp street segments were ap
 
 - **Agency:** San Francisco Municipal Transportation Agency / DataSF
 - **Dataset ID:** `8x25-yybr`
-- **Use:** time-filtered temporary street/vehicle-disruption overlay
+- **Use:** optional-date temporary street/vehicle-disruption overlay
 - **Official GeoJSON:** `https://data.sf.gov/api/v3/views/8x25-yybr/query.geojson?accessType=DOWNLOAD`
 - **Documented scope:** upcoming/current temporary closures associated with Shared Spaces, certain special events, and some construction work. SFMTA documentation says the feed covers SFMTA-permitted closures and does not include every closure managed by Public Works, SFPD, or other departments.
 - **Production filter:** status must explicitly equal `Permitted`; rows also need a non-empty object ID, valid LineString/MultiLineString geometry, and valid `start_dt <= end_dt`.
 - **Retained fields:** case number/name, closure type/status, `start_dt`, `end_dt`, location description, CNN, street/from/to, direction, vehicle impact, info, and official line geometry.
-- **Time interpretation:** the UI treats `start_dt` and `end_dt` as San Francisco local wall times and shows a feature when `start_dt <= selected SF local time <= end_dt`. The date/time control initializes using the `America/Los_Angeles` time zone even for viewers elsewhere.
+- **Date interpretation:** the map opens with no selected date and therefore no closure lines. After the user selects a San Francisco calendar date, a closure is shown when its official local interval overlaps any portion of that day: `start_dt < next_day_00:00 AND end_dt >= selected_day_00:00`. The exact source start/end hours remain visible in hover/click details. **Today** is computed in `America/Los_Angeles`.
 - **Geometry rule:** render SFMTA's official closure line geometry directly. CNN is retained and compared with the Public Works street backbone for validation but is not required to render a valid official closure line.
 - **Interpretation:** street/vehicle disruption indicator only. A closure line does not prove that pedestrian passage is prohibited.
 - **Freshness:** the source documentation describes the report as daily. Current rows did not expose a usable `data_as_of` field, so the product reports the build/retrieval date rather than inventing one. The production workflow refreshes daily.
@@ -116,7 +116,7 @@ All 4,283 embedded features had line geometry, valid time windows, and unique ob
 - **Production permit types:** `Excavation`, `TempOccup`, `StrtImprov`, `ExcStreet`, `AddlStSpac`, `StorCont`, `MinorEnc`, and `StreetSpace`.
 - **Excluded source types:** vending categories, `FoodFac`, `Parklet`, `NightNoise`, and blank/unclassified permit types. Those may be legitimate street uses but are not a clean construction/physical-ROW-occupancy signal for this route layer.
 - **Status rule:** source rows must be `ACTIVE` or `APPROVED` and have valid SF point geometry, a permit number, and a valid permit start/end window.
-- **Date interpretation:** a point is eligible for display when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
+- **Date interpretation:** the permit overlay is absent until the user selects a planning date and enables the permit layer. A point is eligible when the selected San Francisco calendar date falls inclusively within the permit start/end dates. This describes the **authorization window**, not proof that crews are working on that exact date.
 - **Completeness window:** the current/upcoming source is not treated as a historical archive or far-future schedule. Production anchors the supported range to the actual San Francisco retrieval date and suppresses the layer outside the current/upcoming window. Row-level `data_as_of` varies by record and is not used as the snapshot date.
 - **Interpretation:** potential street/sidewalk work or occupancy context only. A permit is not proof of a closure, obstruction, exact work footprint, or pedestrian inaccessibility.
 - **Presentation:** opt-in/off by default because thousands of permit authorization windows may overlap one date. When disabled, the browser does not create hidden permit SVG markers.
@@ -149,7 +149,7 @@ The route-type filter excludes 469 non-work/unclassified source rows; two source
 
 Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; closure status/type/CNN-validation counts and time range; surface-permit source/display type counts, co-located-row aggregation counts, SF retrieval time and supported date range; housing threshold counts and excluded geography counts; parcel-source anomalies; and upstream row-update timestamps when exposed by Socrata metadata.
 
-The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map. A separate final-artifact audit runs before deployment and checks the finished embedded data/UI against the documented invariants. A failed audit prevents a new Pages deployment and leaves the prior successful version live.
+The production geometry and derived attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map. The build first runs the general data/layer artifact audit, then applies the optional planning-date UI mutation, then runs a dedicated final planning-date audit against the HTML that will actually be deployed. A failed audit prevents a new Pages deployment and leaves the prior successful version live.
 
 ## Related / candidate sources
 
