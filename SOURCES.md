@@ -46,7 +46,7 @@ Parcel `6311016` appears twice in the current source with identical parcel ID/ge
 
 - **Agency:** San Francisco Public Works / DataSF
 - **Dataset ID:** `3psu-pn9h`
-- **Use:** visual street network and canonical street-segment geography for future hill, closure, and construction layers
+- **Use:** visual street network and canonical street-segment geography for hill, closure, and construction layers
 - **Official GeoJSON:** `https://data.sf.gov/api/v3/views/3psu-pn9h/query.geojson?accessType=DOWNLOAD`
 - **Source meaning:** Public Works street centerlines. `cnn` is the unique Centerline Network Number for a segment in the dataset. `active = true` means the segment is not retired; it does not guarantee public access or even that every source-layer line is a physical street.
 - **Class codes:** 1 freeway; 2 major street/highway; 3 arterial; 4 collector; 5 residential; 6 freeway ramp; 0 other.
@@ -54,38 +54,42 @@ Parcel `6311016` appears twice in the current source with identical parcel ID/ge
 
 ### Street display filter
 
-The current source has 16,372 active records. Public Works documents several `layer` values that are not physical streets. The route-context layer therefore starts with `active = true` and excludes:
-
-- `PAPER` — mapped but not an actual street;
-- `PAPER_FWYS` — mapped but not actual street, under/near freeway;
-- `PAPER_WATER` — mapped but not actual street, under Bay water;
-- `PSEUDO` — addressing-only segment;
-- `PRIVATE_PARKING` — parking-lot centerline rather than a street.
-
-In the audited 2026-09-28 snapshot those exclusions remove 471 active records (209 `PAPER_FWYS`, 136 `PAPER_WATER`, 115 `PAPER`, 9 `PRIVATE_PARKING`, 2 `PSEUDO`), leaving **15,901 displayed street segments**.
+The audited source has 16,372 active records. The route-context layer starts with `active = true` and excludes `PAPER`, `PAPER_FWYS`, `PAPER_WATER`, `PSEUDO`, and `PRIVATE_PARKING`, leaving **15,901 displayed street segments** in the 2026-09-28 build.
 
 Real but nonstandard context can remain: private streets, unpaved rights-of-way, pedestrian-only streets, park/NPS roads, freeways and ramps. The UI identifies these categories rather than assuming they are publicly walkable or appropriate canvassing routes.
 
 - **Build validation:** 9,000–25,000 displayed line features, unique/non-empty CNN, no excluded source layer leakage, plausible SF coordinates.
 - **Join rule:** CNN is used when another public dataset exposes the same segment identifier. Do not assume a CNN is permanently immutable across all future street-network revisions; source changes are revalidated at build time.
 
-## Build-time provenance
+## S004 — Elevation Contours
 
-Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; housing threshold counts and excluded geography counts; duplicate parcel anomalies; `data_as_of` when available; and upstream row-update timestamps when exposed by Socrata metadata.
-
-The production GeoJSON is embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
-
-## Candidate future sources
-
-### Elevation Contours
 - **Agency:** City and County of San Francisco / DataSF
 - **Dataset ID:** `rnbg-2qxw`
-- **Candidate use:** derive or validate street grade.
+- **Use:** derive the hill-steepness overlay on the displayed Public Works street centerlines
+- **Official GeoJSON:** `https://data.sf.gov/api/v3/views/rnbg-2qxw/query.geojson?accessType=DOWNLOAD`
+- **Source meaning:** 5-foot elevation contours for San Francisco mainland and Treasure Island/Yerba Island, based on the San Francisco Elevation Datum.
+- **Production method:** directly intersect each displayed street centerline with contour lines; order crossings along the street; calculate rise/run between consecutive crossings of different known elevations; combine usable intervals by supported street distance.
+- **No interpolation fallback:** streets without enough direct contour crossings remain unclassified rather than receiving a guessed value.
+- **Confidence:** high/medium/low based on usable crossing intervals, distinct contour levels, and supported street distance. Low-confidence estimates are visually faded/dashed.
+- **Guardrails:** reject degenerate crossing intervals and individual crossing artifacts over 45%; fail for unexpectedly low coverage or an implausibly large share of 20%+ classifications.
+- **Interpretation:** analytical route-planning estimate only, not an official Public Works engineering street-grade survey.
+
+The first experimental hill method interpolated a continuous elevation estimate from nearby contours. It generated implausible 60%+ street grades and was rejected before deployment. The direct-crossing method is the production method because it relies only on observed contour elevations at actual street intersections.
+
+The current direct-crossing build classified 9,062 of 15,901 displayed street segments. The remaining 6,839 are explicitly unavailable. See `validation/CHECKPOINT_5_HILLS.md` for the current distribution and confidence counts.
+
+## Build-time provenance
+
+Every successful build writes `_site/data-manifest.json` containing retrieval time; source URL and dataset ID for each layer; source and displayed record counts; street exclusions and class counts; hill source/method, coverage, confidence and grade-bucket counts; housing threshold counts and excluded geography counts; duplicate parcel anomalies; `data_as_of` when available; and upstream row-update timestamps when exposed by Socrata metadata.
+
+The production geometry and derived street-grade attributes are embedded into `_site/index.html`, so end users do not make DataSF requests when opening the map.
+
+## Candidate future sources
 
 ### Slopes of 20% or Greater
 - **Agency:** San Francisco Planning / DataSF
 - **Dataset ID:** `3vv2-nvev`
-- **Candidate use:** independent cross-check of steep areas; not a substitute for street-segment grade.
+- **Candidate use:** independent historical cross-check of steep areas; not a substitute for street-segment grade.
 
 ### Temporary Street Closures
 - **Agency:** SFMTA / DataSF
