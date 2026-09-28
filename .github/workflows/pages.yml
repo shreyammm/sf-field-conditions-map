@@ -40,7 +40,7 @@ jobs:
           python scripts/direct_contour_hills.py
           python scripts/add_closures.py
           python scripts/add_surface_permits.py
-          python scripts/add_incidents_v4.py
+          python scripts/add_incident_aggregates.py
           python scripts/enrich_closure_context.py
           python scripts/patch_hill_ui.py
           python scripts/fix_hill_text.py
@@ -57,11 +57,10 @@ jobs:
           python scripts/audit_build.py
           # Final product model: no date by default; day-level closure overlap.
           python scripts/optional_planning_date_ui.py
-          # Recent SFPD incidents are an independent, opt-in lookback layer.
-          python scripts/patch_incident_ui.py
-          python scripts/finalize_incident_ui.py
+          # SFPD reports are an independent opt-in lookback/category layer.
+          python scripts/patch_incident_aggregate_ui.py
           python scripts/audit_planning_date.py
-          python scripts/audit_incidents.py
+          python scripts/audit_incident_aggregates.py
 
       - name: Upload inspectable build artifact
         uses: actions/upload-artifact@v4
