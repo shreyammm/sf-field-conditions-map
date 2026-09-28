@@ -45,17 +45,30 @@ After resolving one exact duplicate parcel record, the displayed parcel set cont
 
 The current snapshot contains parcel `6311016` twice with identical geometry but reported unit counts of 170 and 174. The build retains one copy with 174 units and records the conflict in `_site/data-manifest.json`. Exact duplicates are only auto-resolved when both the parcel ID and geometry match. A duplicate parcel ID with different geometry causes the build to fail for manual review.
 
-The exact counts and anomalies are recalculated on every build and written to the generated data manifest.
+## S003 — Streets – Active and Retired
+
+- **Agency:** San Francisco Public Works / DataSF
+- **Dataset ID:** `3psu-pn9h`
+- **Use:** visual street network and canonical street-segment geography for future hill, closure, and construction layers
+- **Official GeoJSON distribution:** `https://data.sf.gov/api/v3/views/3psu-pn9h/query.geojson?accessType=DOWNLOAD`
+- **Build filter:** retain only records where `active = true`
+- **Fields retained:** `cnn`, `street`, `st_type`, `f_st`, `t_st`, `f_node_cnn`, `t_node_cnn`, `classcode`, `jurisdiction`, `layer`, `active`, geometry, and analysis neighborhood when present
+- **Build validation:** 10,000–25,000 active line features; every retained feature must be a LineString/MultiLineString and have a unique CNN
+- **Current active count:** 16,372 segments in the 2026-09-28 build
+- **Current class counts:** 10,906 residential; 2,376 collector; 1,530 arterial; 202 major/highway; 110 freeway; 109 freeway ramp; 1,139 other
+- **Interpretation:** CNN is the stable City street-centerline identifier. Class codes are used for visual hierarchy only, not as a canvassing score.
+
+The map derives a readable street label from the source `street` + `st_type` fields and shows progressively more local labels as the user zooms. Street centerlines are bundled into the static site so opening the map does not trigger a DataSF request.
 
 ## Build-time provenance
 
 Every successful build writes `_site/data-manifest.json` containing:
 
 - retrieval timestamp;
-- source URL and dataset ID for each layer;
+- source URL and dataset ID for each production layer;
 - displayed feature counts;
-- the apartment-layer display filter;
-- current threshold counts;
+- active street-segment count and class-code counts;
+- the apartment-layer display filter and threshold counts;
 - source 20+ unit counts by geography type;
 - counts of excluded analytical and multi-parcel records;
 - duplicate parcel records resolved and the rule used;
@@ -65,11 +78,6 @@ Every successful build writes `_site/data-manifest.json` containing:
 The data are then embedded into `_site/index.html`. End users do not make DataSF requests when they open the deployed map.
 
 ## Candidate future sources
-
-### Streets — Active and Retired
-- **Agency:** San Francisco Public Works / DataSF
-- **Dataset ID:** `3psu-pn9h`
-- **Candidate use:** base street geometry for street-grade derivation and joins by CNN
 
 ### Elevation Contours
 - **Agency:** City and County of San Francisco / DataSF
