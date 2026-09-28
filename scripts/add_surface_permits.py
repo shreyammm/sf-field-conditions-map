@@ -17,6 +17,7 @@ import pathlib
 import re
 import time
 import urllib.request
+from zoneinfo import ZoneInfo
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SITE = ROOT / "_site" / "index.html"
@@ -115,6 +116,9 @@ def main():
     if source.get("type") != "FeatureCollection" or not isinstance(source.get("features"), list):
         raise ValueError("Surface-permit source is not a GeoJSON FeatureCollection")
 
+    retrieved_sf = dt.datetime.now(ZoneInfo("America/Los_Angeles"))
+    retrieval_date = retrieved_sf.date()
+
     fs = source["features"]
     nsrc = len(fs)
     if not 500 <= nsrc <= 20_000:
@@ -172,20 +176,13 @@ def main():
     if len(kept) < 500:
         raise ValueError(f"Too few route-relevant street-work permits after filtering: {len(kept)}")
 
-    # bpc9-7sus is documented as current + permits starting within 14 days.
-    # Do not imply historical/far-future completeness outside that window.
-    if data_as_of:
-        latest_asof = max(data_as_of)
-        support_start = latest_asof[:10]
-    else:
-        latest_asof = None
-        support_start = str(payload.get("meta", {}).get("retrieved_at") or "")[:10]
-    try:
-        start_date = dt.date.fromisoformat(support_start)
-    except ValueError:
-        start_date = dt.datetime.now(dt.timezone.utc).date()
-        support_start = start_date.isoformat()
-    support_end = (start_date + dt.timedelta(days=14)).isoformat()
+    # bpc9-7sus is documented as a current snapshot plus permits starting in
+    # roughly the next 14 days. The row-level data_as_of values vary by record
+    # and are therefore not used as the snapshot date. Use the actual San
+    # Francisco retrieval date for the completeness window.
+    latest_row_asof = max(data_as_of) if data_as_of else None
+    support_start = retrieval_date.isoformat()
+    support_end = (retrieval_date + dt.timedelta(days=14)).isoformat()
 
     payload["surface_permits"] = {"type": "FeatureCollection", "features": kept}
     meta = payload.setdefault("meta", {})
@@ -198,7 +195,8 @@ def main():
         "surface_permit_display_type_counts": dict(kept_types),
         "surface_permit_status_counts": dict(source_statuses),
         "surface_permit_omitted_counts": dict(omitted),
-        "surface_permit_data_as_of": latest_asof,
+        "surface_permit_latest_row_data_as_of": latest_row_asof,
+        "surface_permit_retrieved_sf": retrieved_sf.replace(microsecond=0).isoformat(),
         "surface_permit_supported_from": support_start,
         "surface_permit_supported_through": support_end,
         "surface_permit_time_basis": "selected San Francisco calendar date; permit windows treated as date-inclusive",
@@ -221,7 +219,8 @@ def main():
         "display_type_counts": dict(kept_types),
         "status_counts": dict(source_statuses),
         "omitted_counts": dict(omitted),
-        "data_as_of": latest_asof,
+        "latest_row_data_as_of": latest_row_asof,
+        "retrieved_sf": retrieved_sf.replace(microsecond=0).isoformat(),
         "supported_from": support_start,
         "supported_through": support_end,
         "filter_types": list(KEEP_TYPES),
@@ -237,7 +236,11 @@ def main():
     print(f"surface permit source types: {dict(source_types)}")
     print(f"surface permit kept types: {dict(kept_types)}")
     print(f"surface permit statuses: {dict(source_statuses)}")
-    print(f"surface permit support window: {support_start} through {support_end}; data_as_of={latest_asof}")
+    print(
+        f"surface permit support window: {support_start} through {support_end}; "
+        f"retrieved_sf={retrieved_sf.replace(microsecond=0).isoformat()}; "
+        f"latest_row_data_as_of={latest_row_asof}"
+    )
 
 
 if __name__ == "__main__":
