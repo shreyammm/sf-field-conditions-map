@@ -13,6 +13,17 @@ Build a San Francisco field-conditions map for field logistics using reliable pu
 - Street class affects visual hierarchy only; it is not a route or canvassing score.
 - “Active” means not retired, not necessarily publicly accessible. Private/unpaved/park/pedestrian segments that remain must be described accurately in click details.
 
+
+### Hill / terrain-grade layer
+- Derived from DataSF `Elevation Contours` (`rnbg-2qxw`) and attached to the displayed Public Works street centerline segment/CNN.
+- The source provides five-foot contour lines. The build orders contour crossings along each street centerline.
+- Primary metric: steepest monotonic contour-derived pitch over a horizontal window of at least 80 feet.
+- Fallback when no such window exists: conservative whole-segment estimate using only the observed contour elevation range divided by segment length.
+- User-selectable emphasis thresholds: 5%+, 10%+, 15%+, 20%+. Colors reflect absolute grade bins rather than a composite route score.
+- Report magnitude only; do not infer uphill/downhill direction.
+- Describe values as an estimated terrain-grade proxy, not a surveyed roadway/sidewalk engineering grade.
+- Freeway/ramp context is not hill-emphasized. Private, pedestrian, park, and unpaved rights-of-way that remain in the street layer retain their source-category caveats.
+
 ### Precinct boundaries
 - Thin, visually distinct neutral outlines.
 - Hover/click shows precinct ID and neighborhood when available.
@@ -43,11 +54,10 @@ Build a San Francisco field-conditions map for field logistics using reliable pu
 - Core map layers must not depend on cross-origin API calls at page-open time.
 - The build validates source shape/counts, identifiers, geography type, coordinate bounds, and known exclusion rules before deployment.
 - A failed refresh must not replace the previously successful deployment.
-- Every derived/filtered layer must remain traceable to source dataset, fields, transformation, and retrieval time.
+- Every derived/filtered layer must remain traceable to source dataset, fields, transformation, retrieval time, and validation checks.
 
 ## Candidate next layers
 
-- street grade / hills on the displayed street-segment geography;
 - temporary SFMTA street closures with date/time filters and reliable CNN/spatial matching;
 - construction/right-of-way disruptions clearly distinguished from confirmed closures;
 - reported incidents with explicit geocoding/privacy caveats and a user-selected time window.

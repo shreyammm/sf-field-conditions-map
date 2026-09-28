@@ -81,3 +81,16 @@ CNN is described as the source/City segment identifier, not as permanently immut
 Street labels are cached and may repeat spatially as zoom increases so long streets remain identifiable at neighborhood scale. Major street classes are rendered above lower-priority local context.
 
 For exact duplicate parcel rows with identical geometry, conflicting unit values may be auto-resolved only if all observed values fall in the same displayed threshold bucket; the UI shows the observed range. A conflict that crosses a 20/50/100/200 threshold, or a repeated parcel ID with different geometry, fails the build for manual review.
+
+## D012 — Hills are contour-derived terrain grade on street segments
+**Date:** 2026-09-28
+**Status:** implemented for review
+
+Derive the hill layer from official DataSF five-foot elevation contours (`rnbg-2qxw`) intersected with the same SF Public Works street centerline segments used for navigation. Keep hill information at street-segment geography rather than averaging it into precincts.
+
+The primary display metric is the steepest monotonic contour-derived grade over a horizontal span of at least 80 feet. If a segment does not provide such a window, use a conservative whole-segment fallback based only on the observed contour elevation range divided by total segment length. Do not invent endpoint elevations.
+
+Expose 5% / 10% / 15% / 20% emphasis controls. The grade is a magnitude-only terrain proxy, not an engineering survey, legal roadway grade, sidewalk accessibility determination, travel direction, or composite canvassing score. Freeways and ramps remain geographic context but are not hill-emphasized.
+
+The build must retain enough source/method metadata to reproduce the derivation and must run broad regression checks against known steep San Francisco blocks before deployment.
+

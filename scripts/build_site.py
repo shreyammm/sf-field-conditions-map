@@ -16,6 +16,10 @@ import pathlib
 import time
 import urllib.request
 
+from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPoint, Point, shape
+from shapely.ops import linemerge
+from shapely.strtree import STRtree
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "src" / "index.template.html"
 OUT = ROOT / "_site"
@@ -23,11 +27,13 @@ OUT = ROOT / "_site"
 PRECINCT_DATASET_ID = "d6x4-hefw"
 LAND_USE_DATASET_ID = "c5ge-t6pj"
 STREET_DATASET_ID = "3psu-pn9h"
+CONTOUR_DATASET_ID = "rnbg-2qxw"
 
 # Official City and County of San Francisco downloadable distributions.
 PRECINCT_URL = "https://data.sf.gov/api/v3/views/d6x4-hefw/query.geojson?accessType=DOWNLOAD"
 LAND_USE_URL = "https://data.sf.gov/api/v3/views/c5ge-t6pj/query.geojson?accessType=DOWNLOAD"
 STREET_URL = "https://data.sf.gov/api/v3/views/3psu-pn9h/query.geojson?accessType=DOWNLOAD"
+CONTOUR_URL = "https://data.sf.gov/api/v3/views/rnbg-2qxw/query.geojson?accessType=DOWNLOAD"
 
 PRECINCT_FIELDS = {"prec_2022", "precinct", "id", "neigh22", "nhood", "neighborhood"}
 LAND_USE_FIELDS = {
@@ -293,6 +299,274 @@ def validate_streets(fc: dict):
     validate_sf_coordinates(fc, "Street")
 
 
+
+def contour_elevation(feature: dict):
+    value = (feature.get("properties") or {}).get("elevation")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def validate_contours(fc: dict):
+    features = fc.get("features", [])
+    if not (10000 <= len(features) <= 20000):
+        raise ValueError(f"Contour sanity check failed: received {len(features)} features")
+    bad_geom = [f for f in features if (f.get("geometry") or {}).get("type") not in {"LineString", "MultiLineString"}]
+    if bad_geom:
+        raise ValueError(f"Contour validation failed: {len(bad_geom)} non-line geometries")
+    elevations = [contour_elevation(f) for f in features]
+    if any(v is None or not math.isfinite(v) for v in elevations):
+        raise ValueError("Contour validation failed: missing/non-numeric elevation values")
+    non_five = [v for v in elevations if abs(v / 5 - round(v / 5)) > 1e-6]
+    if non_five:
+        raise ValueError(f"Contour validation failed: {len(non_five)} elevations are not on five-foot intervals")
+    if min(elevations) < -100 or max(elevations) > 2000:
+        raise ValueError(f"Contour validation failed: implausible elevation range {min(elevations)}..{max(elevations)} ft")
+    validate_sf_coordinates(fc, "Contour")
+
+
+def line_length_ft(geometry: dict) -> float:
+    """Approximate horizontal polyline length in feet using local WGS84 scale."""
+    gtype = (geometry or {}).get("type")
+    parts = [geometry.get("coordinates", [])] if gtype == "LineString" else geometry.get("coordinates", []) if gtype == "MultiLineString" else []
+    total_m = 0.0
+    for part in parts:
+        for a, b in zip(part, part[1:]):
+            lon1, lat1 = float(a[0]), float(a[1])
+            lon2, lat2 = float(b[0]), float(b[1])
+            mid_lat = math.radians((lat1 + lat2) / 2)
+            dx = (lon2 - lon1) * 111320.0 * math.cos(mid_lat)
+            dy = (lat2 - lat1) * 111320.0
+            total_m += math.hypot(dx, dy)
+    return total_m * 3.28084
+
+
+def _intersection_points(geom):
+    if geom.is_empty:
+        return []
+    if isinstance(geom, Point):
+        return [geom]
+    if isinstance(geom, MultiPoint):
+        return list(geom.geoms)
+    if isinstance(geom, GeometryCollection):
+        out = []
+        for child in geom.geoms:
+            out.extend(_intersection_points(child))
+        return out
+    if isinstance(geom, LineString):
+        coords = list(geom.coords)
+        return [Point(coords[0]), Point(coords[-1])] if coords else []
+    if isinstance(geom, MultiLineString):
+        out = []
+        for child in geom.geoms:
+            out.extend(_intersection_points(child))
+        return out
+    return []
+
+
+def _single_line_geometry(geometry: dict):
+    geom = shape(geometry)
+    if isinstance(geom, LineString):
+        return geom
+    if isinstance(geom, MultiLineString):
+        merged = linemerge(geom)
+        if isinstance(merged, LineString):
+            return merged
+        if isinstance(merged, MultiLineString) and merged.geoms:
+            return max(merged.geoms, key=lambda g: g.length)
+    return None
+
+
+def _contour_crossings(street_feature: dict, contour_geoms, contour_elevations, contour_tree):
+    line = _single_line_geometry(street_feature.get("geometry") or {})
+    total_ft = line_length_ft(street_feature.get("geometry") or {})
+    if line is None or total_ft <= 0:
+        return total_ft, []
+
+    crossings = []
+    for idx in contour_tree.query(line, predicate="intersects"):
+        inter = line.intersection(contour_geoms[int(idx)])
+        elevation = float(contour_elevations[int(idx)])
+        for point in _intersection_points(inter):
+            position_ft = line.project(point, normalized=True) * total_ft
+            crossings.append((position_ft, elevation))
+    crossings.sort()
+
+    # Remove exact/tiny duplicate intersection artifacts from coincident vertices.
+    cleaned = []
+    for position_ft, elevation in crossings:
+        if cleaned and abs(position_ft - cleaned[-1][0]) < 0.5 and abs(elevation - cleaned[-1][1]) < 0.01:
+            continue
+        cleaned.append((position_ft, elevation))
+    return total_ft, cleaned
+
+
+def _monotonic_contour_runs(crossings):
+    if not crossings:
+        return []
+    cleaned = [crossings[0]]
+    for crossing in crossings[1:]:
+        if crossing[1] == cleaned[-1][1] and crossing[0] - cleaned[-1][0] < 5:
+            cleaned[-1] = crossing
+        else:
+            cleaned.append(crossing)
+
+    runs = []
+    current = [cleaned[0]]
+    direction = 0
+    for crossing in cleaned[1:]:
+        delta = crossing[1] - current[-1][1]
+        sign = 1 if delta > 0 else -1 if delta < 0 else 0
+        if sign == 0 or direction == 0 or sign == direction:
+            current.append(crossing)
+            if sign:
+                direction = sign
+        else:
+            if len(current) >= 2:
+                runs.append(current)
+            current = [current[-1], crossing]
+            direction = sign
+    if len(current) >= 2:
+        runs.append(current)
+    return runs
+
+
+def _hill_metrics_for_street(street_feature: dict, contour_geoms, contour_elevations, contour_tree):
+    """Estimate terrain grade from crossings of official five-foot contours.
+
+    The segment-average fallback conservatively uses only the observed contour
+    elevation range across the whole street segment; it does not invent endpoint
+    elevations. The peak
+    estimate searches monotonic contour runs for the steepest window spanning at
+    least 80 horizontal feet. That window length suppresses single-contour noise
+    while closely reproducing published steep-block examples used for validation.
+    """
+    total_ft, crossings = _contour_crossings(street_feature, contour_geoms, contour_elevations, contour_tree)
+    if total_ft <= 0:
+        return {"avg": None, "peak": None, "display": None, "crossings": 0, "basis": "unavailable"}
+
+    if crossings:
+        elevations = [z for _, z in crossings]
+        average = (max(elevations) - min(elevations)) / total_ft * 100.0
+    else:
+        average = 0.0
+
+    peak = 0.0
+    for run in _monotonic_contour_runs(crossings):
+        for i in range(len(run)):
+            for j in range(i + 1, len(run)):
+                horizontal = run[j][0] - run[i][0]
+                vertical = abs(run[j][1] - run[i][1])
+                if horizontal >= 80.0 and vertical >= 5.0:
+                    peak = max(peak, vertical / horizontal * 100.0)
+
+    if peak > 0:
+        display = peak
+        basis = "peak_80ft_window"
+    else:
+        display = average
+        basis = "segment_average_fallback"
+
+    return {
+        "avg": round(average, 1),
+        "peak": round(peak, 1) if peak > 0 else None,
+        "display": round(display, 1),
+        "crossings": len(crossings),
+        "basis": basis,
+    }
+
+
+def _find_street_segment(streets: dict, street_name: str, endpoint_a: str, endpoint_b: str):
+    target = street_name.strip().upper()
+    endpoints = {endpoint_a.strip().upper(), endpoint_b.strip().upper()}
+    for feature in streets.get("features", []):
+        p = feature.get("properties") or {}
+        name = " ".join(str(v).strip() for v in (p.get("street"), p.get("st_type")) if v).upper()
+        source_endpoints = {str(p.get("f_st") or "").strip().upper(), str(p.get("t_st") or "").strip().upper()}
+        if name == target and source_endpoints == endpoints:
+            return feature
+    return None
+
+
+def derive_hills(streets: dict, contours: dict):
+    validate_contours(contours)
+    contour_geoms = [shape(f["geometry"]) for f in contours["features"]]
+    contour_elevations = [contour_elevation(f) for f in contours["features"]]
+    contour_tree = STRtree(contour_geoms)
+
+    grade_bins = collections.Counter()
+    route_grade_bins = collections.Counter()
+    unavailable = 0
+    freeway_context = 0
+    for feature in streets.get("features", []):
+        p = feature.setdefault("properties", {})
+        metric = _hill_metrics_for_street(feature, contour_geoms, contour_elevations, contour_tree)
+        p["hill_avg_grade_pct"] = metric["avg"]
+        p["hill_peak_grade_pct"] = metric["peak"]
+        p["hill_grade_pct"] = metric["display"]
+        p["hill_grade_basis"] = metric["basis"]
+        p["hill_contour_crossings"] = metric["crossings"]
+        p["hill_route_context"] = not (street_class(feature) in {1, 6} or street_layer(feature) == "FREEWAYS")
+        if not p["hill_route_context"]:
+            freeway_context += 1
+        grade = metric["display"]
+        if grade is None:
+            unavailable += 1
+            grade_bins["unavailable"] += 1
+            if p["hill_route_context"]:
+                route_grade_bins["unavailable"] += 1
+        else:
+            if grade < 5:
+                label = "0-4.9"
+            elif grade < 10:
+                label = "5-9.9"
+            elif grade < 15:
+                label = "10-14.9"
+            elif grade < 20:
+                label = "15-19.9"
+            else:
+                label = "20+"
+            grade_bins[label] += 1
+            if p["hill_route_context"]:
+                route_grade_bins[label] += 1
+
+    # Broad regression checks against well-documented steep blocks. The contour
+    # method estimates terrain pitch, not a legal/engineering survey, so these are
+    # intentionally wide guardrails rather than exact assertions.
+    benchmark_specs = [
+        ("FILBERT ST", "HYDE ST", "LEAVENWORTH ST", 31.5, 20, 45),
+        ("22ND ST", "CHURCH ST", "VICKSBURG ST", 31.5, 20, 45),
+        ("JONES ST", "UNION ST", "FILBERT ST", 29.0, 18, 45),
+        ("DUBOCE AVE", "ALPINE TER", "BUENA VISTA AVE EAST", 27.9, 15, 45),
+    ]
+    benchmarks = []
+    for street_name, a, b, reference, low, high in benchmark_specs:
+        feature = _find_street_segment(streets, street_name, a, b)
+        if feature is None:
+            raise ValueError(f"Hill validation segment missing: {street_name} between {a} and {b}")
+        estimate = (feature.get("properties") or {}).get("hill_grade_pct")
+        if estimate is None or not (low <= estimate <= high):
+            raise ValueError(
+                f"Hill validation out of range for {street_name} between {a} and {b}: {estimate}%"
+            )
+        benchmarks.append({
+            "street": street_name,
+            "between": [a, b],
+            "reference_peak_grade_pct": reference,
+            "derived_grade_pct": estimate,
+        })
+
+    return {
+        "feature_count": len(streets.get("features", [])),
+        "grade_bin_counts": dict(grade_bins),
+        "route_grade_bin_counts": dict(route_grade_bins),
+        "unavailable_count": unavailable,
+        "freeway_context_count": freeway_context,
+        "validation_benchmarks": benchmarks,
+        "method": "five-foot contour crossings; peak monotonic grade over >=80 horizontal ft, segment-average fallback",
+    }
+
 def metadata(dataset_id: str) -> dict:
     try:
         return get_json(f"https://data.sf.gov/api/views/{dataset_id}", attempts=2, timeout=30)
@@ -398,9 +672,15 @@ def main():
         street_excluded_layer_counts,
     ) = fetch_streets()
 
+    contours = get_geojson(CONTOUR_URL)
+    hill_stats = derive_hills(streets, contours)
+    contour_feature_count = len(contours.get("features", []))
+    del contours
+
     p_meta = metadata(PRECINCT_DATASET_ID)
     m_meta = metadata(LAND_USE_DATASET_ID)
     s_meta = metadata(STREET_DATASET_ID)
+    c_meta = metadata(CONTOUR_DATASET_ID)
     bins = threshold_counts(multifamily)
 
     manifest = {
@@ -420,6 +700,22 @@ def main():
             "classcode_counts": street_class_counts,
             "data_as_of": newest_data_as_of(streets),
             "source_rows_updated_at": iso_from_unix(s_meta.get("rowsUpdatedAt")),
+        },
+        "hills": {
+            "mode": "derived from official public data",
+            "label": "Derived from SF Public Works street centerlines + DataSF Elevation Contours",
+            "street_dataset_id": STREET_DATASET_ID,
+            "contour_dataset_id": CONTOUR_DATASET_ID,
+            "contour_url": CONTOUR_URL,
+            "contour_feature_count": contour_feature_count,
+            "contour_interval_ft": 5,
+            "grade_metric": "estimated terrain grade magnitude; peak monotonic window over >=80 horizontal ft when available, otherwise segment-average fallback",
+            "grade_bin_counts": hill_stats["grade_bin_counts"],
+            "route_grade_bin_counts": hill_stats["route_grade_bin_counts"],
+            "unavailable_count": hill_stats["unavailable_count"],
+            "freeway_context_count": hill_stats["freeway_context_count"],
+            "validation_benchmarks": hill_stats["validation_benchmarks"],
+            "source_rows_updated_at": iso_from_unix(c_meta.get("rowsUpdatedAt")),
         },
         "multifamily": {
             **multifamily_source,
@@ -446,6 +742,11 @@ def main():
             "street_excluded_layer_counts": street_excluded_layer_counts,
             "street_data_as_of": manifest["streets"]["data_as_of"],
             "street_source_rows_updated_at": manifest["streets"]["source_rows_updated_at"],
+            "hill_contour_source_url": CONTOUR_URL,
+            "hill_contour_source_rows_updated_at": manifest["hills"]["source_rows_updated_at"],
+            "hill_grade_bin_counts": hill_stats["grade_bin_counts"],
+            "hill_route_grade_bin_counts": hill_stats["route_grade_bin_counts"],
+            "hill_validation_benchmarks": hill_stats["validation_benchmarks"],
             "multifamily_source_url": multifamily_source["url"],
             "multifamily_data_as_of": manifest["multifamily"]["data_as_of"],
             "multifamily_display_filter": manifest["multifamily"]["display_filter"],
@@ -480,6 +781,9 @@ def main():
     )
     print(f"street excluded layers: {street_excluded_layer_counts}")
     print(f"street class counts: {street_class_counts}")
+    print(f"hill grade bins: {hill_stats['grade_bin_counts']}")
+    print(f"hill route-context grade bins: {hill_stats['route_grade_bin_counts']}")
+    print(f"hill validation benchmarks: {hill_stats['validation_benchmarks']}")
     print(f"threshold counts: {bins}")
     print(f"source 20+ geography counts: {dict(geography_counts)}")
     print(f"excluded from apartment layer: {excluded}")
