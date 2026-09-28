@@ -81,3 +81,15 @@ CNN is described as the source/City segment identifier, not as permanently immut
 Street labels are cached and may repeat spatially as zoom increases so long streets remain identifiable at neighborhood scale. Major street classes are rendered above lower-priority local context.
 
 For exact duplicate parcel rows with identical geometry, conflicting unit values may be auto-resolved only if all observed values fall in the same displayed threshold bucket; the UI shows the observed range. A conflict that crosses a 20/50/100/200 threshold, or a repeated parcel ID with different geometry, fails the build for manual review.
+
+## D012 — Hill steepness uses direct official contour crossings
+**Date:** 2026-09-28
+**Status:** production methodology, pending user visual review
+
+The hill layer derives a street-level running-grade estimate from DataSF Elevation Contours (`rnbg-2qxw`), which publishes 5-foot contour lines. The production method directly intersects each displayed Public Works street centerline with those contours and computes rise/run between consecutive crossings of different known elevations.
+
+A first experimental method estimated elevations from nearby contours using interpolation. It produced implausible 60%+ street grades and was rejected by the build guardrail before deployment. We do not cap those bad values into a plausible-looking range.
+
+The direct-crossing method leaves a street unclassified when there is not enough direct contour evidence. It reports high/medium/low confidence based on the number of usable contour intervals, distinct contour elevations, and directly supported street length. Low-confidence estimates are visually faded/dashed. This is an analytical route-planning estimate, not an official engineering street-grade survey.
+
+Displayed buckets are `<5%`, `5–9.9%`, `10–14.9%`, `15–19.9%`, and `20%+`. Freeways and ramps remain context rather than emphasized canvassing streets.
