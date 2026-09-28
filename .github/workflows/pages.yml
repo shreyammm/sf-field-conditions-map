@@ -61,10 +61,11 @@ jobs:
           python scripts/optional_planning_date_ui.py
           # Short-window law-enforcement dispatch activity: 1–48h, official live API + fallback.
           python scripts/patch_live_calls_ui.py
-          # Provenance/visual pass, then one final semantic correction pass over
+          # Provenance/visual pass, then final semantic/freshness guards over
           # the exact artifact users will receive.
           python scripts/finalize_source_links_and_safety_color.py
           python scripts/final_accuracy_pass.py
+          python scripts/enforce_source_freshness_warning.py
           python scripts/audit_planning_date.py
           python scripts/deep_accuracy_audit.py
 
