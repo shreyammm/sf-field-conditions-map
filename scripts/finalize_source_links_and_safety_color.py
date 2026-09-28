@@ -42,7 +42,7 @@ rep(
 )
 rep(
     ".lcg:hover{fill-opacity:.33;stroke-opacity:1;stroke-width:2.2}",
-    ".lcg:hover{fill-opacity:.64;stroke-opacity:1;stroke-width:2.5}",
+    ".lcg:hover{fill-opacity:.65;stroke:#022c22;stroke-opacity:1;stroke-width:2.5}",
     "aggregate safety hover",
 )
 rep(
