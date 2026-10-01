@@ -66,11 +66,15 @@ jobs:
           python scripts/finalize_source_links_and_safety_color.py
           python scripts/final_accuracy_pass.py
           python scripts/enforce_source_freshness_warning.py
-          # Final turf-cutting workspace: multi-precinct focus/summary plus
-          # fixed-size dispatch markers colored by documented DEM priority.
+          # Turf-cutting workspace: multi-precinct focus/summary plus fixed-size
+          # dispatch markers colored by documented DEM priority.
           python scripts/add_precinct_focus_workspace.py
+          # Final field-use correctness/performance pass. This runs after all UI
+          # mutations so the audits below inspect the exact artifact deployed.
+          python scripts/final_field_ux_performance.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
+          python scripts/audit_field_ux_performance.py
           python scripts/deep_accuracy_audit.py
 
       - name: Upload inspectable build artifact
