@@ -32,7 +32,7 @@ rep(
 )
 rep(
     '<div class="legend"><span class="ln" style="border-top:3px solid #2563eb"></span><span class="legendtext">SFMTA-permitted temporary closure scheduled on selected date</span><span class="info" title="Shown when the official closure interval overlaps any part of the selected San Francisco calendar day. Click for exact hours. It does not necessarily mean pedestrian access is blocked.">ⓘ</span></div>',
-    '<div class="legend"><span class="ln" style="border-top:4px dashed #c11574"></span><span class="legendtext">SFMTA-permitted temporary closure on selected date</span><span class="info" title="Magenta dashed line = official source closure geometry whose interval overlaps the selected San Francisco calendar day. It does not necessarily mean pedestrian access is blocked.">ⓘ</span></div>',
+    '<div class="legend"><span class="ln" style="border-top:4px dashed #c11574"></span><span class="legendtext">SFMTA-permitted temporary closure scheduled on selected date</span><span class="info" title="Magenta dashed line = official source closure geometry whose interval overlaps any part of the selected San Francisco calendar day. Click for exact source hours. It does not necessarily mean pedestrian access is blocked.">ⓘ</span></div>',
     "closure legend",
 )
 
@@ -101,7 +101,7 @@ renderFocusSummary=function(){
   const h=selectedHousingSummary();
   if(metrics.length){
     const shown=Object.entries(h.buckets).filter(([label,n])=>n&&Number(label.split(/[–+]/)[0])>=Math.min(20,Number(S.n))).map(([label,n])=>`<strong>${n}</strong> × ${label}`).join(' · ');
-    metrics[0].innerHTML=`<b>${h.total.toLocaleString()} units</b><span>on ${h.parcels.toLocaleString()} displayed ${Number(S.n)}+ unit parcel${h.parcels===1?'':'s'}</span>${shown?`<div class="densitybreak">${shown}</div>`:''}`;
+    metrics[0].innerHTML=`<b>${h.total.toLocaleString()} units</b><span>on ${h.parcels.toLocaleString()} uniquely counted ${Number(S.n)}+ unit parcel${h.parcels===1?'':'s'}</span>${shown?`<div class="densitybreak">${shown}</div>`:''}`;
   }
   const q=dateOnly(S.ct),cg=closureGroupsForSelection();
   if(metrics.length>=3){
