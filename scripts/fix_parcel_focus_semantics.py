@@ -107,9 +107,13 @@ if old_note not in html:
     raise SystemExit("parcel focus fix: summary note anchor missing")
 html = html.replace(old_note, new_note, 1)
 
-# Repack after adding polygon-overlap memberships.
+# Repack after adding polygon-overlap memberships. Recompute the payload match
+# after all preceding HTML edits so replacement offsets cannot become stale.
 packed = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-html = html[:m.start(1)] + packed + html[m.end(1):]
+m2 = re.search(r"window\.SF_FIELD_DATA=(\{.*?\});\s*</script>", html, re.S)
+if not m2:
+    raise SystemExit("parcel focus fix: embedded payload missing before final repack")
+html = html[:m2.start(1)] + packed + html[m2.end(1):]
 SITE.write_text(html, encoding="utf-8")
 
 manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
