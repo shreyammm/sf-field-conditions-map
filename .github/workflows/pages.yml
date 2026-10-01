@@ -78,11 +78,15 @@ jobs:
           # Final interaction pass: easy map-based precinct picking, stale-live
           # summary guard, and low-DOM citywide street overview.
           python scripts/final_turf_usability.py
+          # Make repeated closure records legible and make the housing encoding
+          # explicit as units per parcel/property lot rather than areal density.
+          python scripts/clarify_closures_housing.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
           python scripts/audit_parcel_focus_semantics.py
           python scripts/audit_field_ux_performance.py
           python scripts/audit_turf_usability.py
+          python scripts/audit_closure_housing_clarity.py
           python scripts/deep_accuracy_audit.py
 
       - name: Upload inspectable build artifact
