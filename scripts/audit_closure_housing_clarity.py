@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deployment-blocking audit for closure/housing clarity improvements."""
+"""Deployment-blocking audit for closure/access-screen clarity improvements."""
 from __future__ import annotations
 
 import json
@@ -48,23 +48,31 @@ for f in closures:
         labels[label] += 1
 check(any(n > 1 for n in labels.values()), "expected at least one repeated source location to exercise grouping")
 
-# Housing must be described as unit concentration on a property lot, not true
-# areal density or a building footprint.
+# Parcel layer must be interpretable as a screen for advance access verification,
+# while remaining explicit that unit count is not observed access or a skip list.
 for token in (
-    "Housing concentration by parcel",
-    "Color = residential units associated with one property lot",
-    "Darker color = more residential units associated with that parcel.",
-    "not units per acre",
-    "not the building footprint",
-    "lighter → darker = more units on one parcel",
+    "Shared-entry access screen",
+    "SF Planning parcel unit count · access is not confirmed",
+    "Flag parcels with at least",
+    "verify access before assigning",
+    "access-verification screen, not a no-canvass list",
+    "not calibrated probabilities of access failure",
+    "Access-verification screen",
+    "Screening cue only: verify building entry before assignment",
+    "not a confirmed no-canvass list",
+    "accesscallout",
 ):
-    check(token in html, f"housing interpretation missing: {token}")
-check("selectedHousingSummary" in html and "densitybreak" in html, "selected housing breakdown missing")
+    check(token in html, f"access-screen interpretation missing: {token}")
+check("selectedHousingSummary" in html and "densitybreak" in html, "selected parcel breakdown missing")
 check("20–49" in html and "50–99" in html and "100–199" in html and "200+" in html, "housing unit buckets missing")
+check("ge50" in html and "ge100" in html, "selected-area large-parcel counts missing")
+check("not confirmed access" in html, "source limitation on access missing")
 
 hard = manifest.get("closure_housing_clarity") or {}
-check(int(hard.get("version") or 0) == 1, "closure/housing clarity manifest missing")
-check("not units per acre" in str(hard.get("housing_interpretation") or ""), "manifest housing interpretation incomplete")
+check(int(hard.get("version") or 0) == 2, "closure/access clarity manifest missing or wrong version")
+interp = str(hard.get("housing_interpretation") or "")
+for phrase in ("access verification", "size signal only", "not confirmed access", "not units per acre", "not a no-canvass designation"):
+    check(phrase in interp, f"manifest access-screen interpretation incomplete: {phrase}")
 check("source location description" in str(hard.get("closure_summary") or ""), "manifest closure grouping rule incomplete")
 
 # Preserve network/security contract and valid JS.
@@ -78,11 +86,11 @@ for i, script in enumerate(scripts):
     check(r.returncode == 0, f"inline JS block {i} syntax failed: {r.stderr.strip()[:500]}")
 
 if issues:
-    print(f"CLOSURE/HOUSING CLARITY AUDIT FAIL: {len(issues)} issue(s)")
+    print(f"CLOSURE/ACCESS CLARITY AUDIT FAIL: {len(issues)} issue(s)")
     for issue in issues:
         print(" -", issue)
     raise SystemExit(1)
 
-print("CLOSURE/HOUSING CLARITY AUDIT PASS")
+print("CLOSURE/ACCESS CLARITY AUDIT PASS")
 print("closures: magenta dashed source geometry; summary separates corridors from source line records")
-print("housing: unit concentration per parcel/property lot; explicit bucket breakdown; not units per acre")
+print("parcels: explicit access-verification screen; 50+/100+ counts; no claim of confirmed access or automatic skip")
