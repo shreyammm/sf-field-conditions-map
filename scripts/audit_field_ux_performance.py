@@ -15,6 +15,8 @@ check(h.get('version')==1,'hardening manifest missing')
 check(float(h.get('payload_reduction_pct') or 0)>=20,'payload reduction <20%')
 check(int(h.get('payload_bytes_after') or 10**9)<21_000_000,'embedded payload still >21MB')
 check('raw.filter(f=>inFocus(f,\'i\'))' in html,'dispatch focus filter is not before display aggregation')
+pos=html.rfind('renderI=function()'); end=html.find('const _hoverBeforeWorkspace',pos); final_live=html[pos:end] if pos>=0 and end>pos else ''
+check("focusTxt=PFOCUS.size?' · selected precincts':''" in final_live,'final live renderer references focusTxt without declaring it')
 check('low=S.z<2.4&&!PFOCUS.size' in html,'focused dispatch view still low-zoom clusters')
 check('focus_precincts:[...a.precincts]' in html,'display clusters do not preserve represented precinct membership')
 check('const PRECINCT_INDEX=' in html and 'geomBBox' in html,'client precinct bbox index missing')
