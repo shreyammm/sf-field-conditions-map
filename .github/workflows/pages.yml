@@ -72,8 +72,12 @@ jobs:
           # Final field-use correctness/performance pass. This runs after all UI
           # mutations so the audits below inspect the exact artifact deployed.
           python scripts/final_field_ux_performance.py
+          # Polygon display and unique summary assignment intentionally differ
+          # for parcels that cross precinct boundaries.
+          python scripts/fix_parcel_focus_semantics.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
+          python scripts/audit_parcel_focus_semantics.py
           python scripts/audit_field_ux_performance.py
           python scripts/deep_accuracy_audit.py
 
