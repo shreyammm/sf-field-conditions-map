@@ -41,13 +41,25 @@ required={
  'surface_permits':['permit_number','permit_type','source_statuses','source_locations','source_descriptions','focus_precinct'],
  'live_calls':['id','received_datetime','open','priority_final','focus_precinct'],
 }
+workspace_meta=(data.get('meta') or {}).get('precinct_workspace') or {}
+audited_unassigned=workspace_meta.get('unassigned_counts') or {}
 for layer,keys in required.items():
     fs=((data.get(layer) or {}).get('features') or [])
     check(bool(fs),f'{layer} empty after compaction')
     for key in keys:
-        # focus_precinct is allowed absent on the few audited unassigned parcel cases.
         if key=='focus_precinct' and layer=='multifamily':
-            check(sum(1 for f in fs if key not in (f.get('properties') or {}))<=5,'too many parcel focus assignments missing after compaction')
+            missing=sum(1 for f in fs if key not in (f.get('properties') or {}))
+            expected=int(audited_unassigned.get('parcels',missing))
+            check(missing==expected,f'parcel missing focus assignment count {missing} disagrees with audited workspace count {expected}')
+            check(missing<=5,'too many parcel focus assignments missing after compaction')
+        elif key=='focus_precinct' and layer=='live_calls':
+            # A public privacy-mapped point can legitimately fall outside the
+            # official precinct polygons. Preserve it as unassigned rather than
+            # inventing a precinct merely to satisfy a UI audit.
+            missing=sum(1 for f in fs if key not in (f.get('properties') or {}))
+            expected=int(audited_unassigned.get('live_calls_fallback',missing))
+            check(missing==expected,f'live-call missing focus assignment count {missing} disagrees with audited workspace count {expected}')
+            check(missing<=10,'unexpectedly many live-call public points fall outside precinct coverage')
         else:
             check(all(key in (f.get('properties') or {}) for f in fs),f'{layer} lost required field {key}')
 # No new runtime network dependencies.
@@ -67,5 +79,6 @@ if issues:
 print('FIELD UX/PERFORMANCE AUDIT PASS')
 print(f"payload: {h.get('payload_bytes_before'):,} -> {h.get('payload_bytes_after'):,} bytes ({h.get('payload_reduction_pct')}% smaller)")
 print('focus correctness: filter dispatch points before clustering; selected view does not spatially cluster privacy-mapped points')
+print('unassigned semantics: legitimate out-of-precinct parcel/live public points stay unassigned rather than being guessed')
 print('runtime: indexed/cached precinct lookup; selected streets collapsed to context paths; out-of-focus parcels not instantiated')
 print('mobile: map-first 54/46 dynamic-viewport split; larger touch targets; methodology collapsed')
