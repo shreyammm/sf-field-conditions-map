@@ -81,9 +81,9 @@ jobs:
           # Make repeated closure records legible and make the housing encoding
           # explicit as an access-verification screen rather than a no-canvass claim.
           python scripts/clarify_closures_housing.py
-          # Actual terrain uses official contour geometry; longer-horizon incident
-          # context is a build-time SFPD snapshot with rolling 1/3/6/12-month windows.
-          python scripts/add_topography_history.py
+          # Actual terrain uses compact official contour paths; longer-horizon
+          # incident context is a build-time SFPD snapshot with rolling windows.
+          python scripts/add_topography_history_v2.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
           python scripts/audit_parcel_focus_semantics.py
