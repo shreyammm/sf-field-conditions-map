@@ -36,23 +36,32 @@ m = re.search(r"window\.SF_FIELD_DATA=(\{.*?\});\s*</script>", html, re.S)
 check(bool(m), "embedded payload missing")
 data = json.loads(m.group(1)) if m else {}
 
-# Actual topography: official contour geometry, not another street-color proxy.
-topo = ((data.get("topography") or {}).get("features") or [])
-check(1_500 <= len(topo) <= 5_000, f"topography feature count implausible: {len(topo)}")
-for f in topo:
-    p = f.get("properties") or {}
-    g = f.get("geometry") or {}
-    check(g.get("type") in {"LineString", "MultiLineString"}, "topography includes non-line geometry")
-    z = p.get("elevation_ft")
-    check(isinstance(z, (int, float)) and abs(float(z) / 25 - round(float(z) / 25)) < 1e-6, f"display contour is not 25-ft interval: {z}")
-    check(bool(p.get("major")) == (int(z) % 100 == 0), f"100-ft index-contour flag mismatch: {z}")
+# Actual topography: the browser receives two compact SVG paths projected from
+# a lightly simplified subset of the official contour-line geometry. This keeps
+# actual terrain contours without embedding tens of MB of redundant GeoJSON.
+topo = data.get("topography_paths") or {}
+minor = str(topo.get("minor") or "")
+major = str(topo.get("major") or "")
+check(bool(minor) and bool(major), "compact topography paths missing")
+check(minor.startswith("M") and major.startswith("M"), "topography SVG paths malformed")
+path_vertices = minor.count("M") + minor.count("L") + major.count("M") + major.count("L")
 mt = manifest.get("topography_display") or {}
 check(mt.get("dataset_id") == "rnbg-2qxw", "topography source id drift")
+check(10_000 <= int(mt.get("source_feature_count") or 0) <= 20_000, "topography source feature count implausible")
+check(1_500 <= int(mt.get("display_source_feature_count") or 0) <= 5_000, "25-ft contour source-subset count implausible")
 check(mt.get("source_interval_ft") == 5 and mt.get("display_interval_ft") == 25 and mt.get("major_interval_ft") == 100, "topography interval metadata wrong")
+check(0 < float(mt.get("display_simplification_degrees") or 0) <= 0.0001, "topography display simplification missing/too coarse")
+check(int(mt.get("display_vertex_count") or 0) == path_vertices, "topography path vertex count disagrees with manifest")
+check(0 < path_vertices < int(mt.get("source_vertex_count_selected") or 0), "topography simplification did not reduce selected source vertices")
+actual_path_bytes = len(minor.encode()) + len(major.encode())
+check(actual_path_bytes == int(mt.get("path_bytes") or -1), "topography path byte count disagrees with manifest")
+check(actual_path_bytes < 7_000_000, f"topography paths exceed 7 MB: {actual_path_bytes:,}")
 check("No synthetic elevation surface is interpolated" in html, "topography interpolation caveat missing")
+check("lightly simplifies the line geometry only for rendering performance" in html, "topography display-simplification disclosure missing")
 check('id="topoToggle" type="checkbox" checked' in html, "topography is not available/on by default")
 check('id="hToggle" type="checkbox"' in html and 'id="hToggle" type="checkbox" checked' not in html, "derived street steepness should be optional/off by default")
 check("Topographic contour · 25 ft" in html and "Index contour · 100 ft" in html, "topography legend missing")
+check("DATA.topography_paths" in html, "runtime is not rendering compact topography paths")
 
 # Historical incident context: one unique incident report per incident_id, then
 # aggregated only at DataSF's privacy-mapped public intersection points.
@@ -94,6 +103,8 @@ check("c30" in html and "c90" in html and "c180" in html and "c365" in html, "hi
 check("color encodes average unique reports per 30 days" in html, "historical color semantics missing from methodology")
 check("not every report establishes a crime" in html.lower(), "historical report-vs-crime caveat missing")
 check(html.count('href="https://data.sf.gov/d/wg3w-h783"') >= 2, "historical source is not linked in both directory/methodology")
+check('id="histToggle" type="checkbox"' in html and 'id="histToggle" type="checkbox" checked' not in html, "historical layer should remain opt-in")
+check('data-hdays="90">3 months</button>' in html and 'data-hdays="90">3 months</button>' in html, "3-month historical option missing")
 
 # Daily source is allowed modest lag, but a very stale historical snapshot should
 # block deployment rather than silently look current.
@@ -112,9 +123,11 @@ if updated:
 else:
     warnings.append("historical incident source metadata did not provide rowsUpdatedAt")
 
-# Preserve app packaging contract: this feature adds no browser requests.
+# Preserve app packaging contract: this feature adds no browser requests and the
+# final static page stays reasonably sized for mobile field use.
 check(len(re.findall(r"\bfetch\s*\(", html)) == 1, "topography/history introduced an extra runtime fetch")
-check(len(html.encode("utf-8")) < 32_000_000, f"final HTML exceeds 32 MB: {len(html.encode('utf-8')):,}")
+final_bytes = len(html.encode("utf-8"))
+check(final_bytes < 32_000_000, f"final HTML exceeds 32 MB: {final_bytes:,}")
 
 scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
 for i, script in enumerate(scripts):
@@ -134,7 +147,8 @@ if issues:
     raise SystemExit(1)
 
 print("TOPOGRAPHY/HISTORY AUDIT PASS")
-print(f"topography: {len(topo)} official 25-ft display contours; 100-ft index contours emphasized")
+print(f"topography: {mt.get('display_source_feature_count')} official 25-ft source contours -> {path_vertices:,} compact display vertices / {actual_path_bytes:,} bytes")
 print(f"historical points: {len(hist)}; rolling totals: {sums}")
+print(f"final HTML: {final_bytes:,} bytes")
 for x in warnings:
     print("warning:", x)
