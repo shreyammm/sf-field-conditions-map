@@ -75,10 +75,14 @@ jobs:
           # Polygon display and unique summary assignment intentionally differ
           # for parcels that cross precinct boundaries.
           python scripts/fix_parcel_focus_semantics.py
+          # Final interaction pass: easy map-based precinct picking, stale-live
+          # summary guard, and low-DOM citywide street overview.
+          python scripts/final_turf_usability.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
           python scripts/audit_parcel_focus_semantics.py
           python scripts/audit_field_ux_performance.py
+          python scripts/audit_turf_usability.py
           python scripts/deep_accuracy_audit.py
 
       - name: Upload inspectable build artifact
