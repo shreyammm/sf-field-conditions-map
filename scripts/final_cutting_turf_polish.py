@@ -56,11 +56,12 @@ def main():
     )
 
     # The access-screen layer is static-ish Planning data, unlike dispatches or
-    # closures. Put its actual snapshot date where a turf cutter will see it.
+    # closures. Put its actual snapshot date where a turf cutter will see it,
+    # while preserving the audited access-limitation wording verbatim.
     html = replace_one(
         html,
         'SF Planning parcel unit count · access is not confirmed',
-        f'SF Planning parcel unit count · snapshot {parcel_date} · access is not confirmed',
+        f'SF Planning parcel unit count · access is not confirmed · snapshot {parcel_date}',
         "parcel snapshot date",
     )
 
