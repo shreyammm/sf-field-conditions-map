@@ -84,12 +84,18 @@ jobs:
           # Actual terrain uses compact official contour paths; longer-horizon
           # incident context is a build-time SFPD snapshot with rolling windows.
           python scripts/add_topography_history_v2.py
-          # Current Supervisor Districts are low-opacity categorical background
-          # context only and never alter turf/layer counts.
+          # Transparent frequency+severity context by precinct from the same
+          # SFPD incident source; this is not a calibrated safety/risk score.
+          python scripts/add_precinct_incident_index.py
+          # Current Supervisor Districts are categorical background context only
+          # and never alter turf/layer counts.
           python scripts/add_supervisor_districts.py
           # Last-mile turf-cutter clarity: visible parcel snapshot date,
           # interpretable contours, accessible search, and low-zoom incident guard.
           python scripts/final_cutting_turf_polish.py
+          # Precinct labels, stronger district colors, ranking presentation, and
+          # low-risk render/interaction performance hardening.
+          python scripts/final_precinct_labels_index_performance.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
           python scripts/audit_parcel_focus_semantics.py
@@ -97,8 +103,11 @@ jobs:
           python scripts/audit_turf_usability.py
           python scripts/audit_closure_housing_clarity.py
           python scripts/audit_topography_history.py
+          python scripts/audit_precinct_incident_index.py
           python scripts/audit_supervisor_districts.py
           python scripts/audit_final_turf_polish.py
+          python scripts/audit_final_map_hardening_v2.py
+          python scripts/audit_source_registry_v2.py
           python scripts/deep_accuracy_audit.py
 
       - name: Upload inspectable build artifact
