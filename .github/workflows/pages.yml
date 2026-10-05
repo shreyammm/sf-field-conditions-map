@@ -96,6 +96,8 @@ jobs:
           # Precinct labels, stronger district colors, ranking presentation, and
           # low-risk render/interaction performance hardening.
           python scripts/final_precinct_labels_index_performance.py
+          # Make the weighted-index coverage and scored-report denominator explicit.
+          python scripts/final_incident_index_clarity.py
           python scripts/audit_planning_date.py
           python scripts/audit_precinct_workspace.py
           python scripts/audit_parcel_focus_semantics.py
@@ -104,6 +106,7 @@ jobs:
           python scripts/audit_closure_housing_clarity.py
           python scripts/audit_topography_history.py
           python scripts/audit_precinct_incident_index.py
+          python scripts/audit_incident_index_clarity.py
           python scripts/audit_supervisor_districts.py
           python scripts/audit_final_turf_polish.py
           python scripts/audit_final_map_hardening_v2.py
