@@ -35,40 +35,21 @@ HEADERS = {
     "Accept": "application/json,*/*;q=0.1",
 }
 
-# Product-defined severity tiers. These are deliberately narrow and explicit.
-# Categories not listed here are excluded from the weighted index rather than
-# being assigned a guessed severity. Assault uses the source subcategory to
-# distinguish aggravated from other assault reports where possible.
 TIER4_EXACT = {
-    "homicide",
-    "rape",
-    "robbery",
+    "homicide", "rape", "robbery",
     "human trafficking (a), commercial sex acts",
     "human trafficking (b), involuntary servitude",
-    "human trafficking",
+    "human trafficking", "human trafficking, commercial sex acts",
 }
 TIER3_EXACT = {
-    "arson",
-    "weapons carrying etc",
-    "weapons offense",
-    "other sexual offenses",
-    "sex offense",
+    "arson", "weapons carrying etc", "weapons offense", "weapons offence",
+    "other sexual offenses", "sex offense",
 }
-TIER2_EXACT = {
-    "burglary",
-    "motor vehicle theft",
-}
+TIER2_EXACT = {"burglary", "motor vehicle theft"}
 TIER1_EXACT = {
-    "larceny theft",
-    "stolen property",
-    "vandalism",
-    "fraud",
-    "forgery and counterfeiting",
-    "embezzlement",
-    "drug offense",
-    "drug violation",
-    "prostitution",
-    "disorderly conduct",
+    "larceny theft", "stolen property", "vandalism", "malicious mischief",
+    "fraud", "forgery and counterfeiting", "embezzlement", "drug offense",
+    "drug violation", "prostitution", "disorderly conduct",
 }
 
 
@@ -148,11 +129,9 @@ def source_rows(query_start: dt.datetime):
     rows, offset, limit = [], 0, 50_000
     while True:
         qs = urllib.parse.urlencode({
-            "$select": select,
-            "$where": where,
+            "$select": select, "$where": where,
             "$order": "incident_datetime DESC,incident_id,incident_category,incident_subcategory",
-            "$limit": limit,
-            "$offset": offset,
+            "$limit": limit, "$offset": offset,
         })
         batch = get_json(INCIDENT_API + "?" + qs)
         if not isinstance(batch, list):
@@ -190,7 +169,6 @@ def main():
     html = SITE.read_text(encoding="utf-8")
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     m, payload = parse_payload(html)
-
     precincts = (payload.get("precincts") or {}).get("features") or []
     geoms, ids = [], []
     for f in precincts:
@@ -198,8 +176,7 @@ def main():
         g = shape(f.get("geometry"))
         if not pid or g.is_empty or not g.is_valid:
             raise ValueError(f"Invalid precinct geometry/id while building incident index: {pid!r}")
-        geoms.append(g)
-        ids.append(pid)
+        geoms.append(g); ids.append(pid)
     if len(ids) != len(set(ids)) or not 400 <= len(ids) <= 800:
         raise ValueError(f"Unexpected precinct id set: {len(ids)} / unique={len(set(ids))}")
     tree = STRtree(geoms)
@@ -207,15 +184,11 @@ def main():
     hist_meta = manifest.get("historical_incidents") or {}
     query_start = parse_local(hist_meta.get("query_start_local"))
     if query_start is None:
-        query_start = (dt.datetime.now(SF_TZ).replace(tzinfo=None, microsecond=0) - dt.timedelta(days=366))
+        query_start = dt.datetime.now(SF_TZ).replace(tzinfo=None, microsecond=0) - dt.timedelta(days=366)
     anchor = query_start + dt.timedelta(days=366)
     cut = {days: anchor - dt.timedelta(days=days) for days in WINDOWS}
     rows = source_rows(query_start)
 
-    # One incident can have multiple source rows because it can carry multiple
-    # incident codes/categories. Preserve the union of categories, choose the
-    # most common public coordinate if source rows disagree, and count the
-    # incident ID once at its maximum mapped severity tier.
     grouped = {}
     row_invalid = 0
     for r in rows:
@@ -223,17 +196,11 @@ def main():
         when = parse_local(r.get("incident_datetime"))
         lat, lon = parse_float(r.get("latitude")), parse_float(r.get("longitude"))
         if not iid or when is None or lat is None or lon is None or not (-122.60 <= lon <= -122.25 and 37.65 <= lat <= 37.90):
-            row_invalid += 1
-            continue
-        rec = grouped.setdefault(iid, {
-            "when": when,
-            "coords": collections.Counter(),
-            "cats": set(),
-        })
+            row_invalid += 1; continue
+        rec = grouped.setdefault(iid, {"when": when, "coords": collections.Counter(), "cats": set()})
         rec["when"] = max(rec["when"], when)
         rec["coords"][(round(lon, 7), round(lat, 7))] += 1
         rec["cats"].add((str(r.get("incident_category") or "").strip(), str(r.get("incident_subcategory") or "").strip()))
-
     if len(grouped) < 8_000:
         raise ValueError(f"Too few unique incident IDs for index: {len(grouped)}")
 
@@ -244,13 +211,8 @@ def main():
         pid: {days: {"reports": 0.0, "weighted": 0.0, "tiers": {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}} for days in WINDOWS}
         for pid in ids
     }
-    mapped_unique = 0
-    scored_mapped_unique = 0
-    scored_mapped_365 = 0
-    unscored_mapped_unique = 0
-    unassigned_scored_unique = 0
-    boundary_split_unique = 0
-    coordinate_conflict_incidents = 0
+    mapped_unique = mapped_365_unique = scored_mapped_unique = scored_mapped_365 = 0
+    unscored_mapped_unique = unassigned_scored_unique = boundary_split_unique = coordinate_conflict_incidents = 0
 
     for iid, rec in grouped.items():
         if len(rec["coords"]) > 1:
@@ -265,14 +227,14 @@ def main():
         hits = sorted(set(hits))
         if hits:
             mapped_unique += 1
+            if rec["when"] >= cut[365]:
+                mapped_365_unique += 1
 
-        tiers = []
-        cats_for_incident = set()
+        tiers, cats_for_incident = [], set()
         for cat, sub in rec["cats"]:
             nc = norm(cat)
             if nc:
-                cats_for_incident.add(cat.strip())
-                observed_categories[nc] += 1
+                cats_for_incident.add(cat.strip()); observed_categories[nc] += 1
             t = severity_tier(cat, sub)
             if t:
                 tiers.append(t)
@@ -287,8 +249,7 @@ def main():
             if any(severity_tier(c, s) > 0 for c, s in rec["cats"] if c == cat):
                 scored_category_incidents[cat] += 1
         if not hits:
-            unassigned_scored_unique += 1
-            continue
+            unassigned_scored_unique += 1; continue
         scored_mapped_unique += 1
         if rec["when"] >= cut[365]:
             scored_mapped_365 += 1
@@ -300,20 +261,11 @@ def main():
                 continue
             for pid in hits:
                 x = per_precinct[pid][days]
-                x["reports"] += share
-                x["weighted"] += tier * share
-                x["tiers"][tier] += share
+                x["reports"] += share; x["weighted"] += tier * share; x["tiers"][tier] += share
 
-    # Ranking uses severity-weighted report load normalized to a 30-day period.
-    # This is a relative operational-context index, not a calibrated probability
-    # of harm and not a claim that every underlying report establishes a crime.
-    ranks_by_window = {}
-    index_by_window = {}
+    ranks_by_window, index_by_window = {}, {}
     for days in WINDOWS:
-        vals = {
-            pid: per_precinct[pid][days]["weighted"] * 30.0 / days
-            for pid in ids
-        }
+        vals = {pid: per_precinct[pid][days]["weighted"] * 30.0 / days for pid in ids}
         ranks_by_window[days], index_by_window[days] = competition_ranks(vals)
 
     records = []
@@ -322,12 +274,10 @@ def main():
         for days in WINDOWS:
             x = per_precinct[pid][days]
             windows[str(days)] = {
-                "reports": round(x["reports"], 3),
-                "weighted": round(x["weighted"], 3),
+                "reports": round(x["reports"], 3), "weighted": round(x["weighted"], 3),
                 "reports_per30": round(x["reports"] * 30.0 / days, 2),
                 "weighted_per30": round(x["weighted"] * 30.0 / days, 2),
-                "index": round(index_by_window[days][pid], 1),
-                "rank": int(ranks_by_window[days][pid]),
+                "index": round(index_by_window[days][pid], 1), "rank": int(ranks_by_window[days][pid]),
                 "tiers": {str(t): round(x["tiers"][t], 3) for t in (1, 2, 3, 4)},
             }
         records.append({"precinct": pid, "windows": windows})
@@ -335,21 +285,18 @@ def main():
     assigned_scored_365 = sum(per_precinct[pid][365]["reports"] for pid in ids)
     if abs(assigned_scored_365 - scored_mapped_365) > 1e-6:
         raise ValueError(f"Split allocation did not preserve scored 365d total: {assigned_scored_365} vs {scored_mapped_365}")
-
+    coverage_365 = round(100.0 * scored_mapped_365 / mapped_365_unique, 1) if mapped_365_unique else None
     payload["precinct_incident_index"] = {
-        "source_dataset_id": INCIDENT_ID,
-        "anchor_local": anchor.isoformat(timespec="seconds"),
-        "precincts": records,
+        "source_dataset_id": INCIDENT_ID, "anchor_local": anchor.isoformat(timespec="seconds"),
+        "meta": {"weighted_category_coverage_365d_pct": coverage_365}, "precincts": records,
     }
     packed = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     html = html[:m.start(1)] + packed + html[m.end(1):]
     SITE.write_text(html, encoding="utf-8")
 
     manifest["precinct_incident_index"] = {
-        "dataset_id": INCIDENT_ID,
-        "source_url": "https://data.sf.gov/d/wg3w-h783",
-        "query_start_local": query_start.isoformat(timespec="seconds"),
-        "anchor_local": anchor.isoformat(timespec="seconds"),
+        "dataset_id": INCIDENT_ID, "source_url": "https://data.sf.gov/d/wg3w-h783",
+        "query_start_local": query_start.isoformat(timespec="seconds"), "anchor_local": anchor.isoformat(timespec="seconds"),
         "windows_days": list(WINDOWS),
         "report_filter": "Initial, Vehicle Initial, Coplogic Initial; non-null public latitude/longitude",
         "incident_dedupe_rule": "one record per incident_id; severity tier is maximum across that incident's source categories; most-common public coordinate used if source rows conflict",
@@ -360,31 +307,29 @@ def main():
             "4": "Homicide, Rape, Robbery, Human Trafficking, and aggravated Assault",
             "3": "other Assault, Arson, Weapons categories, and Other Sexual Offenses/Sex Offense",
             "2": "Burglary and Motor Vehicle Theft",
-            "1": "Larceny Theft, Stolen Property, Vandalism, Fraud, Forgery/Counterfeiting, Embezzlement, Drug categories, Prostitution, and Disorderly Conduct",
+            "1": "Larceny Theft, Stolen Property, Vandalism/Malicious Mischief, Fraud, Forgery/Counterfeiting, Embezzlement, Drug categories, Prostitution, and Disorderly Conduct",
             "0": "all other/ambiguous/non-criminal/admin categories excluded rather than assigned a guessed severity",
         },
-        "source_rows_fetched": len(rows),
-        "unique_incident_ids": len(grouped),
-        "mapped_unique_incidents": mapped_unique,
-        "scored_mapped_unique_incidents": scored_mapped_unique,
-        "scored_mapped_365d_incidents": scored_mapped_365,
+        "source_rows_fetched": len(rows), "unique_incident_ids": len(grouped),
+        "mapped_unique_incidents": mapped_unique, "scored_mapped_unique_incidents": scored_mapped_unique,
+        "mapped_365d_incidents_with_precinct": mapped_365_unique, "scored_mapped_365d_incidents": scored_mapped_365,
+        "weighted_category_coverage_365d_pct": coverage_365,
         "unscored_mapped_unique_incidents": unscored_mapped_unique,
         "unassigned_scored_unique_incidents": unassigned_scored_unique,
         "boundary_split_unique_incidents": boundary_split_unique,
-        "coordinate_conflict_incidents": coordinate_conflict_incidents,
-        "invalid_rows_omitted": row_invalid,
+        "coordinate_conflict_incidents": coordinate_conflict_incidents, "invalid_rows_omitted": row_invalid,
         "assigned_scored_365d_total": round(assigned_scored_365, 6),
         "observed_category_incident_rows": dict(sorted(observed_categories.items())),
         "scored_category_incidents": dict(sorted(scored_category_incidents.items())),
         "excluded_category_incidents": dict(sorted(excluded_category_incidents.items())),
-        "privacy_caveat": "SFPD public locations are mapped to nearby intersections for anonymity and can fall on/across precinct boundaries; precinct rankings are approximate geographic context",
+        "privacy_caveat": "SFPD public locations are privacy-mapped to nearby intersections for anonymity and can move across precinct boundaries; precinct rankings are approximate geographic context",
     }
     MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(
         "precinct incident index added: "
         f"precincts={len(records)}; source_rows={len(rows)}; unique={len(grouped)}; "
         f"mapped={mapped_unique}; scored_mapped={scored_mapped_unique}; "
-        f"boundary_split={boundary_split_unique}; unassigned_scored={unassigned_scored_unique}"
+        f"boundary_split={boundary_split_unique}; unassigned_scored={unassigned_scored_unique}; coverage365={coverage_365}%"
     )
     print("observed incident categories:", sorted(observed_categories))
 
