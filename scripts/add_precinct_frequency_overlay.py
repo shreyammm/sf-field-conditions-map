@@ -8,7 +8,7 @@ covered by exactly one current election precinct, then places precincts into
 five raw-count quintile bands. It does not weight severity and does not
 normalize for population, area, street miles, or foot traffic.
 
-Supervisor District shading remains visible underneath the frequency overlay.
+Supervisor Districts are shown as thick colored boundary outlines. Incident frequency is a user-controlled precinct highlight filter, not a full-map background.
 """
 from __future__ import annotations
 
@@ -186,14 +186,21 @@ def main():
     html = html.replace("Reported incident history ↗", "Reported incident frequency ↗", 1)
 
     css = r'''
-/* 365-day precinct reported-incident frequency overlay */
+/* 365-day precinct reported-incident frequency filter */
 .legacyHistoryHidden{display:none!important}
-.freqfill{fill:#101828;stroke:none;pointer-events:none;vector-effect:non-scaling-stroke;mix-blend-mode:multiply}
-.freqband1{fill-opacity:.012}.freqband2{fill-opacity:.038}.freqband3{fill-opacity:.075}.freqband4{fill-opacity:.12}.freqband5{fill-opacity:.18}
-.freqbox{margin:5px 0 9px;padding:7px 8px;border:1px solid #e4e7ec;border-radius:7px;background:#fcfcfd;font-size:9.8px;line-height:1.35;color:#667085}
-.freqkey{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:5px 0 3px}.freqkey span{display:inline-flex;gap:3px;align-items:center;white-space:nowrap}.freqkey i{width:13px;height:11px;border-radius:2px;border:1px solid #d0d5dd;background:#fff}.freqkey .f1{background:rgba(16,24,40,.012)}.freqkey .f2{background:rgba(16,24,40,.038)}.freqkey .f3{background:rgba(16,24,40,.075)}.freqkey .f4{background:rgba(16,24,40,.12)}.freqkey .f5{background:rgba(16,24,40,.18)}
+.freqfill{fill:#7F56D9;fill-opacity:.18;stroke:#6941C6;stroke-width:1.8;stroke-opacity:.92;pointer-events:none;vector-effect:non-scaling-stroke}
+.freqbox{margin:6px 0 10px;padding:9px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;font-size:10px;line-height:1.4;color:#475467}
+.freqfilterlabel{display:block;font-weight:800;color:#101828;margin-bottom:5px}
+.freqselect{width:100%;box-sizing:border-box;border:1px solid #98a2b3;border-radius:6px;background:#fff;padding:7px 8px;font:inherit;font-size:11px;color:#344054}
+.freqstatus{margin-top:6px;font-weight:700;color:#344054}
+.freqnote{margin-top:4px;color:#667085}
 .freqSummary{margin:0 0 8px;padding:7px 8px;border:1px solid #e4e7ec;border-radius:7px;background:#f9fafb;font-size:10.5px;line-height:1.4;color:#344054}.freqSummary b{color:#344054}
+/* District identity is carried by a thick colored outline so it does not compete with the incident filter. */
+.distfill{fill-opacity:0!important;stroke-width:3!important;stroke-opacity:.95!important}
+.distfill.focus-district{fill-opacity:0!important;stroke-width:4.5!important;stroke-opacity:1!important}
+.districtmini i{width:14px!important;height:4px!important;border:0!important;border-radius:99px!important}
 '''
+
     if "</style>" not in html:
         raise ValueError("Style end not found")
     html = html.replace("</style>", css + "</style>", 1)
@@ -215,8 +222,9 @@ def main():
     ranges = [f"0–{c1}", f"{c1+1}–{c2}", f"{c2+1}–{c3}", f"{c3+1}–{c4}", f"{c4+1}+"]
     update_text = friendly_source_date(hist_meta.get("source_rows_updated_at"))
     frequency_ui = f'''
-<div class="row"><div><div class="label">Reported incident frequency</div><div class="muted">Raw unique mapped SFPD incident reports · rolling 365 days · {update_text}</div></div><label class="switch"><input id="freqToggle" type="checkbox" checked><span></span></label></div>
-<div id="freqBox" class="freqbox"><strong>Precinct frequency · last 365 days</strong><div class="freqkey"><span><i class="f1"></i>{ranges[0]}</span><span><i class="f2"></i>{ranges[1]}</span><span><i class="f3"></i>{ranges[2]}</span><span><i class="f4"></i>{ranges[3]}</span><span><i class="f5"></i>{ranges[4]}</span></div><div>Lighter → fewer mapped reports; darker → more. The five bands are citywide quintiles, so each contains roughly one-fifth of SF precincts. <strong>Raw counts only:</strong> not adjusted for precinct size, population, street miles, or foot traffic, and not a safety score. Supervisor District color remains underneath.</div></div>'''
+<div class="row"><div><div class="label">Past-year incident report filter</div><div class="muted">Unique mapped SFPD incident reports · rolling 365 days · {update_text}</div></div></div>
+<div id="freqBox" class="freqbox"><label class="freqfilterlabel" for="freqFilter">Highlight precincts with:</label><select id="freqFilter" class="freqselect"><option value="0">All precincts</option><option value="1">{ranges[0]} reports · lowest 20%</option><option value="2">{ranges[1]} reports · 20–40%</option><option value="3">{ranges[2]} reports · 40–60%</option><option value="4">{ranges[3]} reports · 60–80%</option><option value="5">{ranges[4]} reports · highest 20%</option></select><div id="freqStatus" class="freqstatus">All precincts · no incident-frequency highlight applied</div><div class="freqnote">Choosing a band highlights only matching precincts. Exact counts appear on hover/click. This filter does <strong>not</strong> hide closures, terrain, access-screen parcels, permits, or recent dispatch activity. Raw report counts are not a safety score.</div></div>'''
+
     html = html[:mini_end] + frequency_ui + html[mini_end:]
 
     details_start = html.find('<summary>How this map is computed</summary>')
@@ -225,47 +233,67 @@ def main():
     details_end = html.find("</details>", details_start)
     if details_end < 0:
         raise ValueError("Methodology details end not found")
-    frequency_method = f'''<div class="methoditem"><strong>Precinct reported-incident frequency</strong><br>Uses SFPD/DataSF dataset <span class="code">wg3w-h783</span> <a class="src-link" href="https://data.sf.gov/d/wg3w-h783" target="_blank" rel="noopener noreferrer">official source ↗</a>. The upstream build keeps initial report types and counts each <span class="code">incident_id</span> once, so multiple incident-code rows do not multiply an incident. This layer sums the rolling 365-day count for each privacy-mapped public point covered by exactly one current election precinct. Points outside precinct geometry or covered by more than one precinct are omitted rather than duplicated or guessed. The five neutral-darkness bands are citywide raw-count quintiles using this build's cut points: {c1}, {c2}, {c3}, and {c4} reports. The Supervisor District categorical color remains visible underneath. This view does not weight severity and is not normalized for precinct area, population, street mileage, or foot traffic; it is reported-incident frequency context, not a crime rate or canvasser/neighborhood safety score.</div>'''
+    frequency_method = f'''<div class="methoditem"><strong>Precinct reported-incident frequency filter</strong><br>Uses SFPD/DataSF dataset <span class="code">wg3w-h783</span> <a class="src-link" href="https://data.sf.gov/d/wg3w-h783" target="_blank" rel="noopener noreferrer">official source ↗</a>. The upstream build keeps initial report types and counts each <span class="code">incident_id</span> once, so multiple incident-code rows do not multiply an incident. Each privacy-mapped public point contributes to the one current election precinct that unambiguously covers it; points outside precinct geometry or covered by more than one precinct are omitted rather than duplicated or guessed. The filter groups precincts into citywide raw-count quintiles using this build's cut points: {c1}, {c2}, {c3}, and {c4} reports. Selecting a band highlights matching precincts only; operational layers remain visible. Supervisor District identity is shown separately with thick colored boundaries. This view does not weight severity and is not normalized for precinct area, population, street mileage, or foot traffic; it is reported-incident frequency context, not a crime rate or canvasser/neighborhood safety score.</div>'''
+
     html = html[:details_end] + frequency_method + html[details_end:]
 
     init_call = "init();loadFocusFromUrl();"
     if init_call not in html:
         raise ValueError("Final init call not found")
     js = r'''
-// ----- simple 365-day precinct reported-incident frequency overlay -----
-const ifl=$('ifl');S.sif=true;
+// ----- 365-day precinct reported-incident frequency filter -----
+const ifl=$('ifl');
+S.freqBand=0;
 function freq365(p){return Number((p||{}).incident_frequency_365||0)}
 function freqBand(p){return Math.max(1,Math.min(5,Number((p||{}).incident_frequency_band||1)))}
 function freqRank(p){return Number((p||{}).incident_frequency_rank||0)}
-function freqBandLabel(p){const b=freqBand(p);return b===1?'lowest fifth':b===2?'second fifth':b===3?'middle fifth':b===4?'fourth fifth':'highest fifth'}
+function freqBandLabel(p){const b=freqBand(p);return b===1?'lowest 20%':b===2?'20–40% band':b===3?'40–60% band':b===4?'60–80% band':'highest 20%'}
+function freqBandRange(b){const c=DATA.precinct_incident_frequency?.band_cutpoints||[];if(c.length!==4)return '';return b===1?`0–${c[0]}`:b===2?`${c[0]+1}–${c[1]}`:b===3?`${c[1]+1}–${c[2]}`:b===4?`${c[2]+1}–${c[3]}`:`${c[3]+1}+`}
 function renderIncidentFrequency(){
-  ifl.replaceChildren();const box=$('freqBox');
-  if(!S.sif){ifl.style.display='none';if(box)box.style.display='none';return}
-  ifl.style.display='';if(box)box.style.display='';
+  ifl.replaceChildren();
+  const b=Number(S.freqBand||0),status=$('freqStatus');
+  if(!b){ifl.style.display='none';if(status)status.textContent='All precincts · no incident-frequency highlight applied';return}
+  ifl.style.display='';
+  let n=0;
   for(const f of(DATA.precincts?.features||[])){
-    const p=f.properties||{},d=polyPath(f.geometry);if(!d)continue;
+    const p=f.properties||{};if(freqBand(p)!==b)continue;
+    const d=polyPath(f.geometry);if(!d)continue;
     const e=document.createElementNS('http://www.w3.org/2000/svg','path');
-    e.setAttribute('d',d);e.setAttribute('class','freqfill freqband'+freqBand(p));e.setAttribute('aria-hidden','true');ifl.appendChild(e);
+    e.setAttribute('d',d);e.setAttribute('class','freqfill');e.setAttribute('aria-hidden','true');ifl.appendChild(e);n++;
   }
+  if(status)status.textContent=`${n} precinct${n===1?'':'s'} highlighted · ${freqBandRange(b)} reports · ${b===1?'lowest 20%':b===5?'highest 20%':freqBandLabel({incident_frequency_band:b})}`;
 }
-$('freqToggle').onchange=e=>{S.sif=e.target.checked;renderIncidentFrequency()};
+$('freqFilter').onchange=e=>{S.freqBand=Number(e.target.value||0);renderIncidentFrequency();renderFocusSummary()};
+
+// Reframe Supervisor Districts as thick colored boundary outlines rather than fills.
+renderDistricts=function(){
+  dl.replaceChildren();
+  if(!S.sd){dl.style.display='none';$('districtMini').style.display='none';return}
+  dl.style.display='';$('districtMini').style.display='';
+  for(const f of(DATA.supervisor_districts?.features||[])){
+    const p=f.properties||{},n=Number(p.district),d=polyPath(f.geometry);if(!d||!DISTRICT_COLORS[n])continue;
+    const e=document.createElementNS('http://www.w3.org/2000/svg','path');
+    e.setAttribute('d',d);e.setAttribute('class','distfill');e.setAttribute('fill','none');e.style.stroke=DISTRICT_COLORS[n];
+    e.dataset.district=String(n);dl.appendChild(e);
+  }
+  updateDistrictFocus();
+};
 
 S.shi=false;
 updateIncidentIndexSummary=function(){document.querySelector('.incidentIndexSummary')?.remove()};
-const _renderHistoryRetired=renderHistory;
 renderHistory=function(){S.shi=false;hil.replaceChildren();hil.style.display='none';updateHistorySummary()};
 
 const _hoverBeforeFrequency=hover;
 hover=function(e){
-  const base=_hoverBeforeFrequency(e);if(e.dataset.k!=='p'||!S.sif)return base;
+  const base=_hoverBeforeFrequency(e);if(e.dataset.k!=='p')return base;
   const p=e.f?.properties||{},n=freq365(p),r=freqRank(p);
-  return `${base}<br><strong>${n.toLocaleString()} reported incidents · past 365 days</strong>${r?` · raw-count rank #${r}`:''}<br><span style="opacity:.82">${freqBandLabel(p)} of SF precincts by raw mapped report count. Not adjusted for precinct size/population/foot traffic; not a safety score.</span>`;
+  return `${base}<br><strong>${n.toLocaleString()} mapped SFPD incident reports · past 365 days</strong>${r?` · raw-count rank #${r}`:''}<br><span style="opacity:.82">${freqBandRange(freqBand(p))} reports · ${freqBandLabel(p)} of SF precincts. Raw frequency only; not adjusted for precinct size/population/foot traffic and not a safety score.</span>`;
 };
 const _clickedBeforeFrequency=clicked;
 clicked=function(e){
-  const base=_clickedBeforeFrequency(e);if(e.dataset.k!=='p'||!S.sif)return base;
+  const base=_clickedBeforeFrequency(e);if(e.dataset.k!=='p')return base;
   const p=e.f?.properties||{},n=freq365(p),r=freqRank(p);
-  return `${base}<br><br><strong>Reported incident frequency · last 365 days</strong><br>${n.toLocaleString()} unique mapped SFPD incident report${n===1?'':'s'} · ${freqBandLabel(p)}${r?` · raw-count rank #${r} of ${(DATA.precincts?.features||[]).length}`:''}<br><span class="muted">Frequency only. Raw counts are not adjusted for precinct size, resident population, street mileage, or foot traffic. Public locations are privacy-mapped, and a report does not by itself establish that a crime occurred.</span>`;
+  return `${base}<br><br><strong>Past-year incident report frequency</strong><br>${n.toLocaleString()} unique mapped SFPD incident report${n===1?'':'s'} · ${freqBandRange(freqBand(p))} band · ${freqBandLabel(p)}${r?` · raw-count rank #${r} of ${(DATA.precincts?.features||[]).length}`:''}<br><span class="muted">Raw frequency only. Counts are not adjusted for precinct size, resident population, street mileage, or foot traffic. Public locations are privacy-mapped, and a report does not by itself establish that a crime occurred.</span>`;
 };
 
 const _renderFocusSummaryFrequency=renderFocusSummary;
@@ -273,13 +301,14 @@ renderFocusSummary=function(){
   _renderFocusSummaryFrequency();const box=$('focusSummary');box?.querySelector('.freqSummary')?.remove();box?.querySelector('.incidentIndexSummary')?.remove();box?.querySelector('.histFocus')?.remove();
   if(!box||!PFOCUS.size)return;
   const rows=selectedPrecinctFeatures().map(f=>({pid:String((f.properties||{}).focus_precinct||pid(f.properties||{})),p:f.properties||{}})).sort((a,b)=>freqRank(a.p)-freqRank(b.p)||a.pid.localeCompare(b.pid));
-  const total=rows.reduce((s,x)=>s+freq365(x.p),0),d=document.createElement('div');d.className='freqSummary';
+  const d=document.createElement('div');d.className='freqSummary',b=Number(S.freqBand||0),matches=b?rows.filter(x=>freqBand(x.p)===b).length:rows.length;
   const detail=rows.length<=6?`<br>${rows.map(x=>`P${esc(x.pid)}: ${freq365(x.p).toLocaleString()} (${freqBandLabel(x.p)})`).join(' · ')}`:'';
-  d.innerHTML=`<b>Reported incident frequency · last 365 days:</b> ${total.toLocaleString()} unique mapped reports across ${rows.length} selected precinct${rows.length===1?'':'s'}${detail}<br><span style="color:#667085">Raw counts; not adjusted for precinct size/population/foot traffic and not a safety score.</span>`;
+  d.innerHTML=`<b>Past-year incident reports:</b> ${b?`${matches} of ${rows.length} selected precinct${rows.length===1?'':'s'} match the active ${freqBandRange(b)}-report filter`:'no frequency filter active'}${detail}<br><span style="color:#667085">Raw mapped report counts; not a safety score.</span>`;
   const sd=box.querySelector('.summarydistrict'),head=box.querySelector('.summaryhead');if(sd)sd.insertAdjacentElement('afterend',d);else if(head)head.insertAdjacentElement('afterend',d);else box.prepend(d);
 };
-const _initFrequency=init;init=function(){_initFrequency();renderIncidentFrequency()};
+const _initFrequency=init;init=function(){_initFrequency();renderDistricts();renderIncidentFrequency()};
 '''
+
     html = html.replace(init_call, js + init_call, 1)
 
     manifest["precinct_incident_frequency"] = {
@@ -297,11 +326,16 @@ const _initFrequency=init;init=function(){_initFrequency();renderIncidentFrequen
         "band_rule": "five raw-count quintile bands using nearest-rank 20/40/60/80 percent cut points across current precincts",
         "band_cutpoints": cuts,
         "band_precinct_counts": band_counts,
-        "district_composition_rule": "frequency is a neutral darkness overlay above Supervisor District categorical fill; district color remains simultaneously visible",
+        "presentation_mode": "single-band precinct highlight filter",
+        "default_filter": "all precincts (no frequency highlight)",
+        "district_composition_rule": "Supervisor District identity is shown as a thick colored boundary outline; incident frequency highlights matching precinct interiors only",
         "source_rows_updated_at": hist_meta.get("source_rows_updated_at"),
         "interpretation": "reported-incident frequency context only; not a crime rate, severity score, or canvasser/neighborhood safety prediction",
         "legacy_history_ui": "retired/hidden; recent law-enforcement dispatch activity remains available",
     }
+
+    if manifest.get("supervisor_districts"):
+        manifest["supervisor_districts"]["visual_interpretation"] = "thick categorical colored boundary outlines only; no district fill; colors do not encode rank, score, party, safety, access, or turf quality"
 
     SITE.write_text(html, encoding="utf-8")
     MANIFEST.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
