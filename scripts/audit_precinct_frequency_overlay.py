@@ -89,8 +89,8 @@ check('<g id="view"><g id="dl"></g><g id="ifl"></g><g id="tl"></g>' in html, "fr
 check('class="row legacyHistoryHidden"' in html, "legacy historical control row is not hidden")
 check('class="histControls legacyHistoryHidden"' in html, "legacy historical window controls are not hidden")
 check('legacyHistoryHidden{display:none!important}' in html, "legacy historical hiding CSS missing")
-check('<strong>Reported incident history</strong><br>' not in html, "obsolete historical-point methodology remains visible")
-check('<strong>Precinct reported-incident context index</strong><br>' not in html, "obsolete weighted-index methodology remains visible")
+check('<div class="methoditem"><strong>Reported incident history</strong><br>' not in html, "obsolete historical-point methodology remains visible")
+check('<div class="methoditem"><strong>Precinct reported-incident context index</strong><br>' not in html, "obsolete weighted-index methodology remains visible")
 check('Reported incident frequency ↗' in html, "source directory was not relabeled for frequency view")
 
 check('.freqfill' in html and 'pointer-events:none' in html, "frequency fill may intercept map interactions")
