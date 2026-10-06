@@ -212,7 +212,10 @@ def main():
 <div id="freqBox" class="freqbox"><strong>Precinct frequency · last 365 days</strong><div class="freqkey"><span><i class="f1"></i>{ranges[0]}</span><span><i class="f2"></i>{ranges[1]}</span><span><i class="f3"></i>{ranges[2]}</span><span><i class="f4"></i>{ranges[3]}</span><span><i class="f5"></i>{ranges[4]}</span></div><div>Lighter → fewer mapped reports; darker → more. The five bands are citywide quintiles, so each contains roughly one-fifth of SF precincts. <strong>Raw counts only:</strong> not adjusted for precinct size, population, street miles, or foot traffic, and not a safety score. Supervisor District color remains underneath.</div></div>'''
     html = html[:mini_end] + frequency_ui + html[mini_end:]
 
-    details_end = html.find("</details>")
+    details_start = html.find('<summary>How this map is computed</summary>')
+    if details_start < 0:
+        raise ValueError("Methodology details start not found")
+    details_end = html.find("</details>", details_start)
     if details_end < 0:
         raise ValueError("Methodology details end not found")
     frequency_method = f'''<div class="methoditem"><strong>Precinct reported-incident frequency</strong><br>Uses SFPD/DataSF dataset <span class="code">wg3w-h783</span> <a class="src-link" href="https://data.sf.gov/d/wg3w-h783" target="_blank" rel="noopener noreferrer">official source ↗</a>. The upstream build keeps initial report types and counts each <span class="code">incident_id</span> once, so multiple incident-code rows do not multiply an incident. This layer sums the rolling 365-day count for each privacy-mapped public point covered by exactly one current election precinct. Points outside precinct geometry or covered by more than one precinct are omitted rather than duplicated or guessed. The five neutral-darkness bands are citywide raw-count quintiles using this build's cut points: {c1}, {c2}, {c3}, and {c4} reports. The Supervisor District categorical color remains visible underneath. This view does not weight severity and is not normalized for precinct area, population, street mileage, or foot traffic; it is reported-incident frequency context, not a crime rate or canvasser/neighborhood safety score.</div>'''
