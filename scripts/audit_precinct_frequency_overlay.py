@@ -73,28 +73,32 @@ check(int(meta.get("ambiguous_report_count") or 0) <= 100, "too many boundary-am
 
 for token in (
     'id="dToggle" type="checkbox" checked',
-    'id="freqToggle" type="checkbox" checked',
+    'id="freqFilter"',
     'id="ifl"',
-    'Reported incident frequency',
+    'Past-year incident report filter',
     'rolling 365 days',
-    'citywide quintiles',
-    'Supervisor District color remains underneath',
-    'Raw counts only',
+    'highest 20%',
     'not a safety score',
+    'Supervisor district boundaries',
+    'thick colored boundary outline',
     'Recent law-enforcement dispatch activity',
     'id="iToggle" type="checkbox"',
 ):
     check(token in html, f"frequency/dispatch/district UI missing: {token}")
-check('<g id="view"><g id="dl"></g><g id="ifl"></g><g id="tl"></g>' in html, "frequency overlay is not directly above district shading")
+check('<g id="view"><g id="dl"></g><g id="ifl"></g><g id="tl"></g>' in html, "frequency highlight layer is not directly above district boundaries")
 check('class="row legacyHistoryHidden"' in html, "legacy historical control row is not hidden")
 check('class="histControls legacyHistoryHidden"' in html, "legacy historical window controls are not hidden")
 check('legacyHistoryHidden{display:none!important}' in html, "legacy historical hiding CSS missing")
 check('<div class="methoditem"><strong>Reported incident history</strong><br>' not in html, "obsolete historical-point methodology remains visible")
 check('<div class="methoditem"><strong>Precinct reported-incident context index</strong><br>' not in html, "obsolete weighted-index methodology remains visible")
 check('Reported incident frequency ↗' in html, "source directory was not relabeled for frequency view")
-
-check('.freqfill' in html and 'pointer-events:none' in html, "frequency fill may intercept map interactions")
-check(len(re.findall(r"\bfetch\s*\(", html)) == 1, "frequency overlay introduced a new runtime fetch")
+check('id="freqToggle"' not in html, "obsolete frequency overlay toggle remains visible")
+check("S.freqBand=0" in html, "incident-frequency filter does not default to All/no highlight")
+check("freqBand(p)!==b" in html, "incident-frequency filter does not highlight only the selected band")
+check(".freqfill" in html and "pointer-events:none" in html, "frequency highlight may intercept map interactions")
+check(".distfill{fill-opacity:0!important" in html, "district fill is not suppressed in final presentation")
+check("e.style.stroke=DISTRICT_COLORS[n]" in html, "district outlines do not preserve categorical district colors")
+check(len(re.findall(r"\bfetch\s*\(", html)) == 1, "frequency filter introduced a new runtime fetch")
 
 scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
 for i, script in enumerate(scripts):
@@ -114,4 +118,4 @@ if issues:
 print("PRECINCT FREQUENCY OVERLAY AUDIT PASS")
 print(f"precincts={len(precincts)}; cuts={cuts}; bands={bands}")
 print(f"365d reports: assigned={meta.get('assigned_report_count')}; unassigned={meta.get('unassigned_report_count')}; ambiguous={meta.get('ambiguous_report_count')}; source={source_total}")
-print("presentation: Supervisor District hue retained underneath neutral frequency darkness; legacy historical circles/windows retired; recent dispatch retained")
+print("presentation: incident frequency is an explicit single-band precinct highlight filter; Supervisor Districts are thick colored outlines; legacy historical circles/windows retired; recent dispatch retained")
