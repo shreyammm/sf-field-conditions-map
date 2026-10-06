@@ -185,6 +185,22 @@ def main():
     html = remove_method_item(html, "Precinct reported-incident context index")
     html = html.replace("Reported incident history ↗", "Reported incident frequency ↗", 1)
 
+    # District context is now an outline, not a competing background fill.
+    html = html.replace("Supervisor district shading", "Supervisor district boundaries")
+    html = html.replace(
+        "Current Board of Supervisors districts · categorical reference only",
+        "Current Board of Supervisors districts · thick colored boundary outline",
+    )
+    html = html.replace("Supervisor district background · D1–D11", "Supervisor district boundary · D1–D11")
+    html = html.replace(
+        "Colors only distinguish districts; they do not encode a score or ranking.",
+        "Colored lines identify district boundaries; they do not encode a score or ranking.",
+    )
+    html = html.replace(
+        "The 11 background colors are arbitrary categorical identifiers only",
+        "The 11 boundary colors are arbitrary categorical identifiers only",
+    )
+
     css = r'''
 /* 365-day precinct reported-incident frequency filter */
 .legacyHistoryHidden{display:none!important}
