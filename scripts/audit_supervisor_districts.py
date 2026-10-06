@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deployment-blocking audit for current Supervisor District shading."""
+"""Deployment-blocking audit for current Supervisor District boundary context."""
 from __future__ import annotations
 
 import json
@@ -65,14 +65,14 @@ check(cross == int(meta.get("precinct_cross_district_count") or 0), "cross-distr
 check(unassigned <= 2, f"too many precincts unassigned to Supervisor Districts: {unassigned}")
 check(cross <= 5, f"unexpected number of precincts materially crossing Supervisor Districts: {cross}")
 
-# UI: background only, easy opt-out, and explicit non-score semantics.
+# UI: thick categorical boundaries only, easy opt-out, explicit non-score semantics.
 for token in (
     'id="dToggle" type="checkbox" checked',
     'id="dl"',
-    'Supervisor district shading',
-    'categorical reference only',
-    'Supervisor district background · D1–D11',
-    'colors are arbitrary categorical identifiers only',
+    'Supervisor district boundaries',
+    'thick colored boundary outline',
+    'Supervisor district boundary · D1–D11',
+    'boundary colors are arbitrary categorical identifiers only',
     'selectedSupervisorDistricts()',
 ):
     check(token in html, f"Supervisor District UI missing: {token}")
@@ -81,7 +81,10 @@ check(
     or '<g id="view"><g id="dl"></g><g id="tl"></g>' in html,
     "district layer is not behind contextual overlays/topography/streets",
 )
-check('.distfill' in html and 'pointer-events:none' in html, "district background may intercept map interactions")
+check('.distfill' in html and 'pointer-events:none' in html, "district boundaries may intercept map interactions")
+check('.distfill{fill-opacity:0!important' in html, "district fill remains visible instead of outline-only presentation")
+check('stroke-width:3!important' in html, "district boundary outline is not thick enough to remain legible")
+check('e.style.stroke=DISTRICT_COLORS[n]' in html, "district categorical colors are not applied to boundary strokes")
 check(html.count('href="https://data.sf.gov/d/hcgx-vtsb"') >= 2, "Supervisor District official source not linked in directory + methodology")
 check("rank, political preference, safety, access, or turf quality" in html, "district colors are not explicitly described as non-scoring")
 
@@ -110,4 +113,4 @@ if issues:
 
 print("SUPERVISOR DISTRICT AUDIT PASS")
 print(f"districts=11; precinct_unassigned={unassigned}; cross_district_precincts={cross}")
-print("visual: low-opacity categorical background; default on; optional off; non-interactive")
+print("visual: thick categorical colored boundaries; no district fill; default on; optional off; non-interactive")
