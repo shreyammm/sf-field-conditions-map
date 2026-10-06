@@ -107,17 +107,15 @@ check("privacy" in str(meta.get("privacy_caveat") or "").lower(), "privacy-mappe
 check(abs(float(meta.get("assigned_scored_365d_total") or -1) - assigned365) <= 0.02, "365d assigned total disagrees with embedded index")
 check(abs(float(meta.get("assigned_scored_365d_total") or -1) - float(meta.get("scored_mapped_365d_incidents") or -2)) <= 0.02, "boundary splitting did not preserve mapped scored 365d total")
 
-for token in (
-    "Precinct reported-incident context ranking",
-    "Index 0–100",
-    "not</strong> a probability of harm",
-    "not</strong> an SFPD severity measure",
-    "privacy-mapped",
-    "wg3w-h783",
-):
-    check(token in html, f"incident-index UI/methodology missing: {token}")
-check("crime risk score" not in html.lower(), "UI presents index as a crime-risk score")
-check("neighborhood safety score" in html.lower(), "non-safety-score caveat missing")
+# The product-defined severity-weighted index remains in the build only as an
+# audited experimental data artifact. Its previous user-facing methodology and
+# selected-area summary are intentionally retired in favor of the simpler raw
+# 365-day frequency overlay requested for field use.
+check("wg3w-h783" in html, "incident source provenance missing from final artifact")
+check('<div class="methoditem"><strong>Precinct reported-incident context index</strong><br>' not in html, "retired weighted-index methodology is still visible")
+check("updateIncidentIndexSummary=function(){document.querySelector('.incidentIndexSummary')?.remove()}" in html, "weighted selected-area summary is not explicitly retired")
+check("crime risk score" not in html.lower(), "UI presents incident context as a crime-risk score")
+check("not a safety score" in html.lower(), "raw-frequency non-safety-score caveat missing")
 check(len(re.findall(r"\bfetch\s*\(", html)) == 1, "incident index introduced an additional runtime fetch")
 
 scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S | re.I)
