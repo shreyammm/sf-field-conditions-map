@@ -173,6 +173,13 @@ def main():
         raise ValueError("Legacy historical row not found")
     html = html.replace(old_row, new_row, 1)
     html = html.replace('<div class="histControls">', '<div class="histControls legacyHistoryHidden" aria-hidden="true">', 1)
+    # Remove the obsolete circle-encoding explanation entirely. The hidden
+    # legacy controls stay only as inert binding targets for earlier JS.
+    html = html.replace(
+        '<div class="muted" style="margin-top:6px">Fixed-size circles. Darker color = more unique incident reports per 30 days at that public privacy-mapped intersection. This is report volume, not severity, and not every report establishes a crime.</div>',
+        '',
+        1,
+    )
 
     html = remove_method_item(html, "Reported incident history")
     html = remove_method_item(html, "Precinct reported-incident context index")
