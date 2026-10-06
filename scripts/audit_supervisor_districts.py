@@ -76,7 +76,11 @@ for token in (
     'selectedSupervisorDistricts()',
 ):
     check(token in html, f"Supervisor District UI missing: {token}")
-check('<g id="view"><g id="dl"></g><g id="tl"></g>' in html, "district layer is not behind topography/streets")
+check(
+    '<g id="view"><g id="dl"></g><g id="ifl"></g><g id="tl"></g>' in html
+    or '<g id="view"><g id="dl"></g><g id="tl"></g>' in html,
+    "district layer is not behind contextual overlays/topography/streets",
+)
 check('.distfill' in html and 'pointer-events:none' in html, "district background may intercept map interactions")
 check(html.count('href="https://data.sf.gov/d/hcgx-vtsb"') >= 2, "Supervisor District official source not linked in directory + methodology")
 check("rank, political preference, safety, access, or turf quality" in html, "district colors are not explicitly described as non-scoring")
