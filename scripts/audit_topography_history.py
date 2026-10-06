@@ -95,16 +95,27 @@ check(int(mh.get("unique_incident_ids") or 0) >= sums[365], "unique incident tot
 check("privacy-mapped" in str(mh.get("location_interpretation") or "").lower(), "historical location privacy semantics missing")
 check("not convictions" in str(mh.get("count_interpretation") or "").lower(), "historical count caveat missing")
 
-# UI must expose the four requested windows but avoid converting report volume
-# into a made-up crime-severity or safety score.
-for token in ('data-hdays="30"', 'data-hdays="90"', 'data-hdays="180"', 'data-hdays="365"', "Reported incident history", "Fixed-size circles", "report volume, not severity"):
-    check(token in html, f"historical incident UI missing: {token}")
-check("c30" in html and "c90" in html and "c180" in html and "c365" in html, "historical runtime does not use all four windows")
-check("color encodes average unique reports per 30 days" in html, "historical color semantics missing from methodology")
-check("not every report establishes a crime" in html.lower(), "historical report-vs-crime caveat missing")
-check(html.count('href="https://data.sf.gov/d/wg3w-h783"') >= 2, "historical source is not linked in both directory/methodology")
-check('id="histToggle" type="checkbox"' in html and 'id="histToggle" type="checkbox" checked' not in html, "historical layer should remain opt-in")
-check('data-hdays="90">3 months</button>' in html and 'data-hdays="90">3 months</button>' in html, "3-month historical option missing")
+# The historical point snapshot remains an audited build-time source, but its
+# old 1/3/6/12-month intersection-circle presentation is intentionally retired.
+# The user-facing historical context is now a simpler rolling-365-day precinct
+# frequency overlay; live/recent dispatch remains a separate optional layer.
+check("c365" in html, "historical 365-day source counts are not retained for precinct frequency")
+for token in (
+    'class="row legacyHistoryHidden"',
+    'class="histControls legacyHistoryHidden"',
+    'id="freqToggle" type="checkbox" checked',
+    "Reported incident frequency",
+    "rolling 365 days",
+    "citywide quintiles",
+    "Raw counts only",
+    "not a safety score",
+    "Recent law-enforcement dispatch activity",
+    'id="iToggle" type="checkbox"',
+):
+    check(token in html, f"retired-history/frequency presentation missing: {token}")
+check('<div class="methoditem"><strong>Reported incident history</strong><br>' not in html, "obsolete historical-circle methodology is still visible")
+check("Fixed-size circles. Darker color = more unique incident reports per 30 days" not in html, "obsolete historical-circle explanatory copy is still visible")
+check(html.count('href="https://data.sf.gov/d/wg3w-h783"') >= 2, "historical/frequency source is not linked in source directory + methodology")
 
 # Daily source is allowed modest lag, but a very stale historical snapshot should
 # block deployment rather than silently look current.
